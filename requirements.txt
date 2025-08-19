@@ -1,0 +1,20 @@
+# YouTube upload
+google-auth
+google-auth-oauthlib
+google-api-python-client
+google-auth-httplib2
+
+# Video creation
+moviepy
+ffmpeg-python
+opencv-python
+
+# Image & media download
+requests
+pixabay-api
+
+# TTS (ElevenLabs)
+requests
+
+# Instagram upload
+instagrapi
