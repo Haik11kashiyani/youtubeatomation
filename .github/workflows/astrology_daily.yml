@@ -1,9 +1,9 @@
 name: Astrology Shorts Automation
 
 on:
-  workflow_dispatch: # Run manually from GitHub Actions tab
+  workflow_dispatch: # Run manually
   schedule:
-    - cron: "0 */6 * * *" # Runs every 6 hours
+    - cron: "0 */6 * * *" # every 6 hours
 
 jobs:
   generate_and_upload:
@@ -21,29 +21,21 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Generate the audio using ElevenLabs
       - name: Generate TTS audio
         run: python generate_tts.py
         env:
           ELEVENLABS_KEY1: ${{ secrets.ELEVENLABS_KEY1 }}
 
-      # Create video with automatic zodiac/number based backgrounds
       - name: Create video
         run: python create_video.py
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
-      # Upload final video to YouTube
       - name: Upload to YouTube
         run: python upload.py
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-          SERIES1_PLAYLIST_ID: ${{ secrets.SERIES1_PLAYLIST_ID }} # Horoscope playlist
-          SERIES2_PLAYLIST_ID: ${{ secrets.SERIES2_PLAYLIST_ID }} # Numerology playlist
-
-      # Optional: Upload final video to workflow artifacts for backup
-      - name: Upload video artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: astrology-video
-          path: final_video.mp4
+          SERIES1_PLAYLIST_ID: ${{ secrets.SERIES1_PLAYLIST_ID }} # Horoscope
+          SERIES2_PLAYLIST_ID: ${{ secrets.SERIES2_PLAYLIST_ID }} # Numerology
