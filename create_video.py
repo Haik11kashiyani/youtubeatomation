@@ -4,8 +4,7 @@ import requests
 from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
 
 # -------- CONFIG --------
-UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")  # Add to GitHub Secrets
-PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")            # Add to GitHub Secrets
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")  # Add to GitHub Secrets
 
 ASSET_DIRS = {
     "zodiac": "assets/zodiac",
@@ -25,22 +24,7 @@ def ensure_folders():
         os.makedirs(folder, exist_ok=True)
 
 
-def fetch_from_unsplash(query, folder, count=3):
-    """Fetch images from Unsplash API and save them locally."""
-    url = f"https://api.unsplash.com/photos/random?query={query}&count={count}&client_id={UNSPLASH_ACCESS_KEY}"
-    resp = requests.get(url)
-    if resp.status_code == 200:
-        for idx, img in enumerate(resp.json()):
-            img_url = img["urls"]["regular"]
-            img_data = requests.get(img_url).content
-            path = os.path.join(folder, f"{query}_{idx}.jpg")
-            with open(path, "wb") as f:
-                f.write(img_data)
-    else:
-        print("⚠️ Unsplash fetch failed:", resp.text)
-
-
-def fetch_from_pexels(query, folder, count=3):
+def fetch_from_pexels(query, folder, count=5):
     """Fetch images from Pexels API and save them locally."""
     headers = {"Authorization": PEXELS_API_KEY}
     url = f"https://api.pexels.com/v1/search?query={query}&per_page={count}"
@@ -52,6 +36,7 @@ def fetch_from_pexels(query, folder, count=3):
             path = os.path.join(folder, f"{query}_{idx}.jpg")
             with open(path, "wb") as f:
                 f.write(img_data)
+            print(f"✅ Saved {path}")
     else:
         print("⚠️ Pexels fetch failed:", resp.text)
 
@@ -61,7 +46,6 @@ def get_assets_for_topic(topic, folder):
     files = [f for f in os.listdir(folder) if f.endswith((".png", ".jpg", ".jpeg"))]
     if not files:  # Fetch fresh if empty
         print(f"📥 Fetching new assets for {topic}...")
-        fetch_from_unsplash(topic, folder)
         fetch_from_pexels(topic, folder)
         files = [f for f in os.listdir(folder) if f.endswith((".png", ".jpg", ".jpeg"))]
     return [os.path.join(folder, f) for f in files]
