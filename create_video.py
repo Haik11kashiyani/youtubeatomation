@@ -1,57 +1,100 @@
+# create_video.py
+import requests
 import os
 import random
-import requests
-from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
-
-SCRIPT_FILE = "script.txt"
-AUDIO_FILE = "output.mp3"
-VIDEO_FILE = "final_video.mp4"
+from moviepy.editor import ImageClip, TextClip, CompositeVideoClip
 
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
-PEXELS_URL = "https://api.pexels.com/v1/search"
+VIDEO_OUTPUT = "final_video.mp4"
 
-def fetch_images(query, limit=5):
+def get_query_from_script(script_text: str) -> str:
+    """
+    Detects a query for Pexels based on script content.
+    Horoscope → zodiac sign, Numerology → numbers, Astrology → stars, etc.
+    """
+    script_lower = script_text.lower()
+
+    zodiac_signs = [
+        "aries","taurus","gemini","cancer","leo","virgo",
+        "libra","scorpio","sagittarius","capricorn","aquarius","pisces"
+    ]
+
+    # Check zodiac
+    for sign in zodiac_signs:
+        if sign in script_lower:
+            return f"zodiac {sign}"
+
+    # Numerology detection
+    if "number" in script_lower or "numerology" in script_lower:
+        # Extract a digit if possible
+        digits = [ch for ch in script_lower if ch.isdigit()]
+        if digits:
+            return f"numerology number {digits[0]}"
+        return "numerology"
+
+    # Horoscope generic
+    if "horoscope" in script_lower:
+        return "horoscope zodiac"
+
+    # Astrology fallback
+    return "astrology stars planets"
+
+def download_background(query, save_path="background.png"):
+    """
+    Downloads a background image from Pexels based on query.
+    """
+    url = f"https://api.pexels.com/v1/search?query={query}&per_page=10"
     headers = {"Authorization": PEXELS_API_KEY}
-    params = {"query": query, "per_page": limit, "orientation": "portrait"}
-    r = requests.get(PEXELS_URL, headers=headers, params=params)
-    data = r.json()
-    return [photo["src"]["large"] for photo in data.get("photos", [])]
+    response = requests.get(url, headers=headers)
 
-def download_image(url, filename):
-    r = requests.get(url)
-    with open(filename, "wb") as f:
-        f.write(r.content)
+    if response.status_code != 200:
+        raise Exception(f"❌ Pexels API error: {response.text}")
 
-def create_video():
-    if not os.path.exists(AUDIO_FILE):
-        raise FileNotFoundError("❌ No audio file found")
+    data = response.json()
+    if not data.get("photos"):
+        raise FileNotFoundError(f"❌ No image found for query: {query}")
 
-    with open(SCRIPT_FILE, "r", encoding="utf-8") as f:
-        script_text = f.read().lower()
+    # Pick one image (can randomize between top results)
+    photo = random.choice(data["photos"])
+    img_url = photo["src"]["large"]
 
-    # Choose search query based on script
-    if "horoscope" in script_text or any(z in script_text for z in ["aries","leo","zodiac","pisces"]):
-        query = "zodiac astrology"
-    else:
-        query = "numerology numbers"
+    img_data = requests.get(img_url).content
+    with open(save_path, "wb") as f:
+        f.write(img_data)
 
-    images = fetch_images(query, limit=5)
-    if not images:
-        raise ValueError("❌ No images fetched from Pexels")
+    print(f"✅ Downloaded background for '{query}': {save_path}")
+    return save_path
 
-    clips = []
-    for i, img_url in enumerate(images):
-        img_file = f"bg_{i}.jpg"
-        download_image(img_url, img_file)
-        clip = ImageClip(img_file).set_duration(5)  # each image 5s
-        clips.append(clip)
+def create_video(script_text="Your Horoscope Today"):
+    """
+    Creates a vertical short video with background chosen based on script.
+    """
+    # 1. Pick query from script
+    query = get_query_from_script(script_text)
 
-    final_clip = concatenate_videoclips(clips, method="compose")
+    # 2. Download background
+    bg_path = download_background(query)
 
-    audio = AudioFileClip(AUDIO_FILE)
-    final_clip = final_clip.set_audio(audio).set_duration(audio.duration)
+    # 3. Load background
+    background = ImageClip(bg_path).set_duration(15).resize((1080, 1920))
 
-    final_clip.write_videofile(VIDEO_FILE, fps=24)
+    # 4. Add text overlay
+    text = TextClip(
+        script_text,
+        fontsize=70,
+        color="white",
+        font="Arial-Bold",
+        method="caption",
+        size=(1000, None)
+    ).set_duration(15).set_position("center")
+
+    # 5. Composite video
+    final = CompositeVideoClip([background, text])
+
+    # 6. Export
+    final.write_videofile(VIDEO_OUTPUT, fps=30)
+    print("✅ Video created:", VIDEO_OUTPUT)
 
 if __name__ == "__main__":
-    create_video()
+    # Example usage
+    create_video("♌ Leo Horoscope Today: Big changes are coming your way!")
