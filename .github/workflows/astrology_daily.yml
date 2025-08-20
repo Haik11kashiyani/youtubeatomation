@@ -19,7 +19,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install requests moviepy google-api-python-client google-auth-oauthlib google-auth-httplib2
 
       - name: Generate TTS audio
         run: python generate_tts.py
@@ -37,3 +40,10 @@ jobs:
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           SERIES1_PLAYLIST_ID: ${{ secrets.SERIES1_PLAYLIST_ID }}
           SERIES2_PLAYLIST_ID: ${{ secrets.SERIES2_PLAYLIST_ID }}
+
+      - name: Upload video artifact (backup)
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: final_video
+          path: final_video.mp4
