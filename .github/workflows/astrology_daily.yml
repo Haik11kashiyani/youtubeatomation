@@ -1,34 +1,31 @@
 name: Astrology Shorts Automation
+
 on:
+  workflow_dispatch:   # run manually
   schedule:
-    - cron: "0 6 * * *"
-  workflow_dispatch:
+    - cron: "0 */6 * * *"   # every 6 hours (adjust if needed)
 
 jobs:
   generate_and_upload:
     runs-on: ubuntu-latest
-    env:
-      PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-      ELEVENLABS_KEY1: ${{ secrets.ELEVENLABS_KEY1 }}
-      ELEVENLABS_KEY2: ${{ secrets.ELEVENLABS_KEY2 }}
-      ELEVENLABS_KEY3: ${{ secrets.ELEVENLABS_KEY3 }}
-      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
-      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
-      YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-      SERIES1_PLAYLIST_ID: ${{ secrets.SERIES1_PLAYLIST_ID }}
-      SERIES2_PLAYLIST_ID: ${{ secrets.SERIES2_PLAYLIST_ID }}
-      IG_USERNAME: ${{ secrets.IG_USERNAME }}
-      IG_PASSWORD: ${{ secrets.IG_PASSWORD }}
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: 3.11
-      - run: pip install -r requirements.txt
-      - run: python generate_script.py
-      - run: python fetch_visuals.py
-      - run: python generate_tts.py
-      - run: python create_video.py
-      - run: python youtube_upload.py
-      - run: python instagram_upload.py || echo "Instagram upload skipped"
-      - run: echo "Automation completed successfully"
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate TTS (audio.mp3)
+        run: python generate_tts.py
+
+      - name: Create video
+        run: python create_video.py
+
+      - name: Upload video to YouTube
+        run: python upload_video.py
