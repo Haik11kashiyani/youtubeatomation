@@ -1,45 +1,51 @@
 import os
-import time
 import requests
 
-ELEVENLABS_KEY = os.getenv("ELEVENLABS_KEY1")
-VOICE_ID = "H6QPv2pQZDcGqLwDTIJQ"
+ELEVENLABS_KEY = os.getenv("ELEVENLABS_KEY1")  # from GitHub secrets
+SCRIPT_FILE = "script.txt"
+OUTPUT_FILE = "output.mp3"
 
-def generate_tts(text, output_path="audio.mp3", retries=3, delay=5):
-    print("🎤 Generating audio from ElevenLabs...")
+# You can customize the voice ID (pick from your ElevenLabs account)
+VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # default: "Rachel"
 
-    for attempt in range(1, retries + 1):
-        for model in ["eleven_multilingual_v2", "eleven_monolingual_v1"]:
-            response = requests.post(
-                f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}",
-                headers={
-                    "xi-api-key": ELEVENLABS_KEY,
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "text": text,
-                    "model_id": model,
-                    "voice_settings": {
-                        "stability": 0.6,
-                        "similarity_boost": 0.8
-                    }
-                }
-            )
+def generate_tts():
+    if not ELEVENLABS_KEY:
+        raise ValueError("❌ ELEVENLABS_KEY1 not found in environment variables")
 
-            if response.status_code == 200:
-                with open(output_path, "wb") as f:
-                    f.write(response.content)
-                print(f"✅ Audio saved to {output_path} using model {model}")
-                return output_path
-            else:
-                print(f"⚠️ Attempt {attempt}, model {model} failed: {response.status_code}, {response.text}")
+    # Read script text
+    if not os.path.exists(SCRIPT_FILE):
+        raise FileNotFoundError(f"❌ Script file not found: {SCRIPT_FILE}")
 
-        if attempt < retries:
-            print(f"🔄 Retrying in {delay} seconds...")
-            time.sleep(delay)
+    with open(SCRIPT_FILE, "r", encoding="utf-8") as f:
+        text = f.read().strip()
 
-    raise RuntimeError("❌ All attempts failed to generate audio.")
+    if not text:
+        raise ValueError("❌ Script file is empty")
+
+    print(f"🎤 Generating TTS for script: {text[:100]}...")
+
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"
+    headers = {
+        "xi-api-key": ELEVENLABS_KEY,
+        "Content-Type": "application/json"
+    }
+    data = {
+        "text": text,
+        "voice_settings": {
+            "stability": 0.5,
+            "similarity_boost": 0.75
+        }
+    }
+
+    response = requests.post(url, headers=headers, json=data)
+    if response.status_code != 200:
+        raise RuntimeError(f"❌ TTS generation failed: {response.text}")
+
+    with open(OUTPUT_FILE, "wb") as f:
+        f.write(response.content)
+
+    print(f"✅ Saved TTS audio: {OUTPUT_FILE}")
+
 
 if __name__ == "__main__":
-    sample_text = "Hello world, this is a test."
-    generate_tts(sample_text)
+    generate_tts()
