@@ -2,35 +2,42 @@
 import os
 import requests
 
-ELEVEN_KEYS = [
-    os.getenv("ELEVENLABS_KEY1"),
-    os.getenv("ELEVENLABS_KEY2"),
-    os.getenv("ELEVENLABS_KEY3")
-]
+# Get API key from GitHub Actions secret
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_KEY1")  # change to KEY2/KEY3 if needed
 
-def get_script():
-    with open("script.txt", "r", encoding="utf-8") as f:
-        return f.read()
+# Text to convert to speech
+TEXT = "Welcome to your automated astrology short. Let's get started."
 
-def generate_tts(output_file="audio.mp3"):
-    script = get_script()
-    key = ELEVEN_KEYS[0]  # Can rotate keys if needed
-    url = "https://api.elevenlabs.io/v1/text-to-speech"
+# Output file path (must match create_video.py)
+OUTPUT_PATH = "audio.mp3"
+
+def generate_tts():
+    if not ELEVENLABS_API_KEY:
+        raise ValueError("❌ ELEVENLABS_KEY1 is missing! Did you add it in GitHub Secrets?")
+
+    # ElevenLabs TTS API
+    url = "https://api.elevenlabs.io/v1/text-to-speech/exAVfXMRZp7w4D9Byu1Q"  # replace with your Voice ID
     headers = {
-        "xi-api-key": key,
-        "Content-Type": "application/json"
+        "Accept": "audio/mpeg",
+        "Content-Type": "application/json",
+        "xi-api-key": ELEVENLABS_API_KEY,
     }
     data = {
-        "voice": "your_preferred_voice_id",
-        "input": script
+        "text": TEXT,
+        "model_id": "eleven_multilingual_v2"
     }
+
+    print("🎙️ Requesting TTS from ElevenLabs...")
     response = requests.post(url, json=data, headers=headers)
-    if response.status_code == 200:
-        with open(output_file, "wb") as f:
-            f.write(response.content)
-        print(f"TTS saved to {output_file}")
-    else:
-        print("TTS request failed:", response.text)
+
+    if response.status_code != 200:
+        raise RuntimeError(f"❌ TTS request failed: {response.status_code} {response.text}")
+
+    # Save audio file
+    with open(OUTPUT_PATH, "wb") as f:
+        f.write(response.content)
+
+    print(f"✅ Audio file saved as {OUTPUT_PATH}")
 
 if __name__ == "__main__":
     generate_tts()
