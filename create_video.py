@@ -3,13 +3,13 @@ import random
 import requests
 import moviepy.editor as mp
 
-PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")  # add to GitHub secrets
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")  # add this in GitHub secrets
 
 
-def fetch_assets(query, folder, limit=5):
-    """Fetch random images/videos from Pexels"""
+def fetch_assets(query, folder, limit=2):
+    """Fetch random images from Pexels and save new ones"""
     headers = {"Authorization": PEXELS_API_KEY}
-    url = f"https://api.pexels.com/v1/search?query={query}&per_page={limit}"
+    url = f"https://api.pexels.com/v1/search?query={query}&per_page={limit}&page={random.randint(1,50)}"
     r = requests.get(url, headers=headers)
 
     if r.status_code != 200:
@@ -21,11 +21,11 @@ def fetch_assets(query, folder, limit=5):
 
     for i, photo in enumerate(data.get("photos", [])):
         img_url = photo["src"]["large"]
-        ext = ".jpg"
-        out_path = os.path.join(folder, f"{query}_{i}{ext}")
-        if not os.path.exists(out_path):
-            with open(out_path, "wb") as f:
-                f.write(requests.get(img_url).content)
+        filename = f"{query}_{random.randint(1000,9999)}.jpg"
+        out_path = os.path.join(folder, filename)
+        with open(out_path, "wb") as f:
+            f.write(requests.get(img_url).content)
+        print(f"⬇️ Downloaded: {out_path}")
 
 
 def pick_random_file(folder, extensions=("png", "jpg", "jpeg", "mp4")):
@@ -63,10 +63,9 @@ def create_video():
     series_folder = os.path.join(cache_dir, series_type)
     os.makedirs(series_folder, exist_ok=True)
 
-    # fetch new assets if folder is empty
-    if not os.listdir(series_folder):
-        query = "zodiac astrology" if series_type == "horoscope" else "numerology numbers cosmic"
-        fetch_assets(query, series_folder, limit=5)
+    # ✅ always refresh some new assets each run
+    query = "zodiac astrology" if series_type == "horoscope" else "numerology numbers cosmic"
+    fetch_assets(query, series_folder, limit=2)
 
     bg_path = pick_random_file(series_folder, ("png", "jpg", "jpeg", "mp4"))
     overlay_path = pick_random_file(series_folder, ("png", "jpg", "jpeg"))
