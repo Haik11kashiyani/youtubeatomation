@@ -3,7 +3,7 @@ name: Astrology Shorts Automation
 on:
   workflow_dispatch: # Run manually from GitHub Actions tab
   schedule:
-    - cron: "0 */6 * * *" # Runs every 6 hours (adjust if needed)
+    - cron: "0 */6 * * *" # Runs every 6 hours
 
 jobs:
   generate_and_upload:
@@ -19,31 +19,31 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install requests moviepy google-api-python-client google-auth-oauthlib google-auth-httplib2
+        run: pip install -r requirements.txt
 
+      # Generate the audio using ElevenLabs
       - name: Generate TTS audio
         run: python generate_tts.py
         env:
           ELEVENLABS_KEY1: ${{ secrets.ELEVENLABS_KEY1 }}
 
+      # Create video with automatic zodiac/number based backgrounds
       - name: Create video
         run: python create_video.py
 
+      # Upload final video to YouTube
       - name: Upload to YouTube
         run: python upload.py
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-          SERIES1_PLAYLIST_ID: ${{ secrets.SERIES1_PLAYLIST_ID }}
-          SERIES2_PLAYLIST_ID: ${{ secrets.SERIES2_PLAYLIST_ID }}
+          SERIES1_PLAYLIST_ID: ${{ secrets.SERIES1_PLAYLIST_ID }} # Horoscope playlist
+          SERIES2_PLAYLIST_ID: ${{ secrets.SERIES2_PLAYLIST_ID }} # Numerology playlist
 
-      - name: Upload video artifact (backup)
-        if: always()
+      # Optional: Upload final video to workflow artifacts for backup
+      - name: Upload video artifact
         uses: actions/upload-artifact@v3
         with:
-          name: final_video
+          name: astrology-video
           path: final_video.mp4
