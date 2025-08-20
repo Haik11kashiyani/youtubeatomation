@@ -11,7 +11,7 @@ opencv-python
 
 # Image & media download
 requests
-pixabay-api
+pixabay
 
 # TTS (ElevenLabs)
 requests
