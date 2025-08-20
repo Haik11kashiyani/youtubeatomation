@@ -1,93 +1,105 @@
 import os
 import random
 import requests
-import moviepy.editor as mp
+from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
 
-PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")  # add this in GitHub secrets
+# -------- CONFIG --------
+UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")  # Add to GitHub Secrets
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")            # Add to GitHub Secrets
 
+ASSET_DIRS = {
+    "zodiac": "assets/zodiac",
+    "numerology": "assets/numerology",
+    "backgrounds": "assets/backgrounds"
+}
 
-def fetch_assets(query, folder, limit=2):
-    """Fetch random images from Pexels and save new ones"""
-    headers = {"Authorization": PEXELS_API_KEY}
-    url = f"https://api.pexels.com/v1/search?query={query}&per_page={limit}&page={random.randint(1,50)}"
-    r = requests.get(url, headers=headers)
-
-    if r.status_code != 200:
-        print(f"⚠️ Failed to fetch assets for {query}")
-        return
-
-    data = r.json()
-    os.makedirs(folder, exist_ok=True)
-
-    for i, photo in enumerate(data.get("photos", [])):
-        img_url = photo["src"]["large"]
-        filename = f"{query}_{random.randint(1000,9999)}.jpg"
-        out_path = os.path.join(folder, filename)
-        with open(out_path, "wb") as f:
-            f.write(requests.get(img_url).content)
-        print(f"⬇️ Downloaded: {out_path}")
+OUTPUT_VIDEO = "final_video.mp4"
+AUDIO_FILE = "output.mp3"  # from generate_tts.py
+SCRIPT_FILE = "script.txt" # contains horoscope/numerology text
 
 
-def pick_random_file(folder, extensions=("png", "jpg", "jpeg", "mp4")):
-    files = [f for f in os.listdir(folder) if f.lower().endswith(extensions)]
-    if not files:
-        return None
-    return os.path.join(folder, random.choice(files))
+# -------- HELPER FUNCTIONS --------
+def ensure_folders():
+    """Make sure all asset folders exist."""
+    for folder in ASSET_DIRS.values():
+        os.makedirs(folder, exist_ok=True)
 
 
-def detect_series_type(script_text):
-    horoscope_keywords = ["aries", "taurus", "leo", "zodiac", "horoscope", "virgo", "capricorn", "scorpio"]
-    numerology_keywords = ["life path", "number", "destiny", "numerology", "digit"]
-
-    text = script_text.lower()
-    if any(word in text for word in horoscope_keywords):
-        return "horoscope"
-    elif any(word in text for word in numerology_keywords):
-        return "numerology"
-    return "horoscope"
-
-
-def create_video():
-    base_dir = os.path.dirname(__file__)
-    cache_dir = os.path.join(base_dir, "assets", "cache")
-
-    script_file = os.path.join(base_dir, "script.txt")
-    if not os.path.exists(script_file):
-        raise FileNotFoundError("❌ script.txt not found!")
-    with open(script_file, "r", encoding="utf-8") as f:
-        script_text = f.read()
-
-    series_type = detect_series_type(script_text)
-    print(f"📌 Detected series type: {series_type}")
-
-    series_folder = os.path.join(cache_dir, series_type)
-    os.makedirs(series_folder, exist_ok=True)
-
-    # ✅ always refresh some new assets each run
-    query = "zodiac astrology" if series_type == "horoscope" else "numerology numbers cosmic"
-    fetch_assets(query, series_folder, limit=2)
-
-    bg_path = pick_random_file(series_folder, ("png", "jpg", "jpeg", "mp4"))
-    overlay_path = pick_random_file(series_folder, ("png", "jpg", "jpeg"))
-
-    audio_path = os.path.join(base_dir, "output.mp3")
-    if not os.path.exists(audio_path):
-        raise FileNotFoundError("❌ output.mp3 not found!")
-
-    audio = mp.AudioFileClip(audio_path)
-
-    if bg_path.endswith(".mp4"):
-        background = mp.VideoFileClip(bg_path).resize(height=1080).set_duration(audio.duration)
+def fetch_from_unsplash(query, folder, count=3):
+    """Fetch images from Unsplash API and save them locally."""
+    url = f"https://api.unsplash.com/photos/random?query={query}&count={count}&client_id={UNSPLASH_ACCESS_KEY}"
+    resp = requests.get(url)
+    if resp.status_code == 200:
+        for idx, img in enumerate(resp.json()):
+            img_url = img["urls"]["regular"]
+            img_data = requests.get(img_url).content
+            path = os.path.join(folder, f"{query}_{idx}.jpg")
+            with open(path, "wb") as f:
+                f.write(img_data)
     else:
-        background = mp.ImageClip(bg_path).set_duration(audio.duration).resize(height=1080)
+        print("⚠️ Unsplash fetch failed:", resp.text)
 
-    overlay = mp.ImageClip(overlay_path).set_duration(audio.duration).resize(height=1080).set_opacity(0.3)
 
-    video = mp.CompositeVideoClip([background, overlay]).set_audio(audio)
-    output_path = os.path.join(base_dir, f"{series_type}_video.mp4")
-    video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac")
+def fetch_from_pexels(query, folder, count=3):
+    """Fetch images from Pexels API and save them locally."""
+    headers = {"Authorization": PEXELS_API_KEY}
+    url = f"https://api.pexels.com/v1/search?query={query}&per_page={count}"
+    resp = requests.get(url, headers=headers)
+    if resp.status_code == 200:
+        for idx, img in enumerate(resp.json().get("photos", [])):
+            img_url = img["src"]["large"]
+            img_data = requests.get(img_url).content
+            path = os.path.join(folder, f"{query}_{idx}.jpg")
+            with open(path, "wb") as f:
+                f.write(img_data)
+    else:
+        print("⚠️ Pexels fetch failed:", resp.text)
 
-    print(f"✅ Video saved: {output_path}")
+
+def get_assets_for_topic(topic, folder):
+    """Get or fetch images for the given topic."""
+    files = [f for f in os.listdir(folder) if f.endswith((".png", ".jpg", ".jpeg"))]
+    if not files:  # Fetch fresh if empty
+        print(f"📥 Fetching new assets for {topic}...")
+        fetch_from_unsplash(topic, folder)
+        fetch_from_pexels(topic, folder)
+        files = [f for f in os.listdir(folder) if f.endswith((".png", ".jpg", ".jpeg"))]
+    return [os.path.join(folder, f) for f in files]
+
+
+# -------- MAIN VIDEO CREATION --------
+def create_video():
+    ensure_folders()
+
+    # Read script
+    with open(SCRIPT_FILE, "r", encoding="utf-8") as f:
+        script_text = f.read().lower()
+
+    # Detect type of content
+    if "zodiac" in script_text or any(sign in script_text for sign in 
+        ["aries","taurus","gemini","cancer","leo","virgo","libra","scorpio","sagittarius","capricorn","aquarius","pisces"]):
+        topic = "zodiac"
+    elif "number" in script_text or "numerology" in script_text:
+        topic = "numerology"
+    else:
+        topic = "backgrounds"
+
+    # Pick assets
+    assets = get_assets_for_topic(topic, ASSET_DIRS[topic])
+    chosen = random.sample(assets, min(3, len(assets)))
+
+    # Load audio
+    audio = AudioFileClip(AUDIO_FILE)
+
+    # Create video from images
+    clips = []
+    duration_per_img = audio.duration / len(chosen)
+    for img in chosen:
+        clip = ImageClip(img).set_duration(duration_per_img)
+        clips.append(clip)
+
+    final = concatenate_videoclips(clips, method="compose").set_audio(audio)
+    final.write_videofile(OUTPUT_VIDEO, fps=24)
 
 
 if __name__ == "__main__":
