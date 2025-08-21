@@ -20,10 +20,10 @@ def get_youtube_service():
     return build("youtube", "v3", credentials=creds)
 
 def read_meta():
-    """Read metadata from video_meta.txt"""
+    """Read metadata from script.txt (ignore SCRIPT section)"""
     title, description, tags, playlist = "Astrology Shorts", "Daily astrology", [], None
-    if os.path.exists("video_meta.txt"):
-        with open("video_meta.txt", "r", encoding="utf-8") as f:
+    if os.path.exists("script.txt"):
+        with open("script.txt", "r", encoding="utf-8") as f:
             lines = f.readlines()
             for line in lines:
                 if line.startswith("TITLE:"):
@@ -34,6 +34,7 @@ def read_meta():
                     tags = [t.strip() for t in line.replace("TAGS:", "").split(",") if t.strip()]
                 elif line.startswith("PLAYLIST:"):
                     playlist = line.replace("PLAYLIST:", "").strip()
+                # 🚫 Ignore SCRIPT: section completely
     return title, description, tags, playlist
 
 def upload_video(file_path="final_video.mp4"):
