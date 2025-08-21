@@ -21,10 +21,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Generate viral script
+        run: python generate_script.py
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          HUGGINGFACE_API_KEY: ${{ secrets.HUGGINGFACE_API_KEY }}
+
       - name: Generate TTS audio
         run: python generate_tts.py
         env:
           ELEVENLABS_KEY1: ${{ secrets.ELEVENLABS_KEY1 }}
+          ELEVENLABS_KEY2: ${{ secrets.ELEVENLABS_KEY2 }} # fallback key (optional)
 
       - name: Create video
         run: python create_video.py
