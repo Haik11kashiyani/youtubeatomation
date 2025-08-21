@@ -21,10 +21,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Generate viral script
-        run: python generate_script.py
-        env:
-          HUGGINGFACE_API_KEY: ${{ secrets.HUGGINGFACE_API_KEY }}
+      # Removed generate_script.py step since script.txt will be added manually
 
       - name: Generate TTS audio (with failover keys)
         run: python generate_tts.py
@@ -39,7 +36,7 @@ jobs:
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
 
       - name: Upload to YouTube
-        run: python upload.py
+        run: python youtube_upload.py
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
