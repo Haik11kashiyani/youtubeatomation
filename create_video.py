@@ -1,8 +1,10 @@
 import os
 import requests
 import random
+import re
 from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip
 
+# Config
 PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY")
 SCRIPT_FILE = "script.txt"
 NARRATION_FILE = "narration.mp3"
@@ -10,6 +12,41 @@ OUTPUT_FILE = "final_video.mp4"
 
 DOWNLOAD_DIR = "clips"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+
+def clean_and_extract_keywords(text: str, max_keywords=6):
+    """
+    Extract meaningful keywords from text.
+    - Removes stopwords and short words
+    - Picks nouns / main content words if possible
+    """
+    try:
+        import nltk
+        from nltk.corpus import stopwords
+        from nltk.tokenize import word_tokenize
+        from nltk.tag import pos_tag
+
+        nltk.download("punkt", quiet=True)
+        nltk.download("averaged_perceptron_tagger", quiet=True)
+        nltk.download("stopwords", quiet=True)
+
+        words = word_tokenize(text)
+        words = [w.lower() for w in words if w.isalpha()]
+        stop_words = set(stopwords.words("english"))
+        words = [w for w in words if w not in stop_words]
+
+        # Extract only nouns
+        tagged = pos_tag(words)
+        nouns = [word for word, tag in tagged if tag.startswith("NN")]
+
+        # Pick random sample of nouns
+        keywords = random.sample(nouns, min(max_keywords, len(nouns)))
+        return keywords if keywords else words[:max_keywords]
+
+    except Exception:
+        # Fallback: just pick long words
+        words = re.findall(r"\b[a-zA-Z]{5,}\b", text)
+        return random.sample(words, min(max_keywords, len(words)))
 
 
 def search_pixabay(query: str, max_results=5):
@@ -46,9 +83,9 @@ def build_video():
     with open(SCRIPT_FILE, "r", encoding="utf-8") as f:
         script = f.read()
 
-    # Split script into keywords (basic approach: pick nouns)
-    keywords = random.sample(script.split(), min(5, len(script.split())))
-    print(f"🔍 Keywords for search: {keywords}")
+    # Extract better keywords
+    keywords = clean_and_extract_keywords(script)
+    print(f"🔍 Keywords for Pixabay search: {keywords}")
 
     clips = []
 
@@ -61,7 +98,7 @@ def build_video():
         filename = os.path.join(DOWNLOAD_DIR, f"{word}.mp4")
         if download_video(video_url, filename):
             try:
-                clip = VideoFileClip(filename).subclip(0, 5)  # take first 5s
+                clip = VideoFileClip(filename).subclip(0, 5)  # first 5s
                 clips.append(clip)
             except Exception as e:
                 print(f"⚠️ Error loading {filename}: {e}")
