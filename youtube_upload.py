@@ -1,13 +1,11 @@
+# youtube_upload.py
 import os
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.auth.transport.requests import Request
 
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload","https://www.googleapis.com/auth/youtube"]
-
-SCRIPT_FILE = "script.txt"
-VIDEO_FILE = "final_video.mp4"
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube"]
 
 def get_youtube_service():
     creds = Credentials(
@@ -21,40 +19,40 @@ def get_youtube_service():
     creds.refresh(Request())
     return build("youtube", "v3", credentials=creds)
 
-def detect_category(script_text: str) -> str:
-    text = script_text.lower()
-    horoscope_keywords = ["horoscope","zodiac","aries","taurus","leo","virgo","cancer","pisces","scorpio"]
-    numerology_keywords = ["numerology","life path","destiny number","soul urge","birth number"]
+def read_meta():
+    """Read metadata from video_meta.txt"""
+    title, description, tags, playlist = "Astrology Shorts", "Daily astrology", [], None
+    if os.path.exists("video_meta.txt"):
+        with open("video_meta.txt", "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            for line in lines:
+                if line.startswith("TITLE:"):
+                    title = line.replace("TITLE:", "").strip()
+                elif line.startswith("DESCRIPTION:"):
+                    description = line.replace("DESCRIPTION:", "").strip()
+                elif line.startswith("TAGS:"):
+                    tags = [t.strip() for t in line.replace("TAGS:", "").split(",") if t.strip()]
+                elif line.startswith("PLAYLIST:"):
+                    playlist = line.replace("PLAYLIST:", "").strip()
+    return title, description, tags, playlist
 
-    if any(word in text for word in horoscope_keywords):
-        return "horoscope"
-    elif any(word in text for word in numerology_keywords):
-        return "numerology"
-    else:
-        return "horoscope"  # fallback default
-
-def upload_video(file_path=VIDEO_FILE, title=None, description=None, tags=None, playlist_id=None):
+def upload_video(file_path="final_video.mp4"):
+    title, description, tags, playlist_id = read_meta()
     service = get_youtube_service()
-    media = MediaFileUpload(file_path, chunksize=-1, resumable=True, mimetype="video/*")
 
+    media = MediaFileUpload(file_path, chunksize=-1, resumable=True, mimetype="video/*")
     body = {
-        "snippet": {
-            "title": title or "Astrology Shorts 🌌",
-            "description": description or "Daily astrology update",
-            "tags": tags or ["astrology","shorts","zodiac","numerology"]
-        },
+        "snippet": {"title": title, "description": description, "tags": tags},
         "status": {"privacyStatus": "public"}
     }
-
     request = service.videos().insert(part="snippet,status", body=body, media_body=media)
+
     response = None
     while response is None:
         status, response = request.next_chunk()
-        if status: 
+        if status:
             print(f"Upload {int(status.progress() * 100)}%")
-
-    video_id = response["id"]
-    print(f"✅ Upload complete: https://youtu.be/{video_id}")
+    print("✅ Upload complete.")
 
     if playlist_id:
         service.playlistItems().insert(
@@ -62,30 +60,11 @@ def upload_video(file_path=VIDEO_FILE, title=None, description=None, tags=None, 
             body={
                 "snippet": {
                     "playlistId": playlist_id,
-                    "resourceId": {"kind": "youtube#video", "videoId": video_id}
+                    "resourceId": {"kind": "youtube#video", "videoId": response["id"]}
                 }
             }
         ).execute()
-        print(f"✅ Added to playlist {playlist_id}")
+        print(f"✅ Added video to playlist {playlist_id}")
 
 if __name__ == "__main__":
-    # read script
-    if not os.path.exists(SCRIPT_FILE):
-        raise FileNotFoundError("❌ script.txt not found")
-    with open(SCRIPT_FILE, "r", encoding="utf-8") as f:
-        script_text = f.read()
-
-    # detect category
-    category = detect_category(script_text)
-    playlist_id = os.getenv("SERIES1_PLAYLIST_ID") if category=="horoscope" else os.getenv("SERIES2_PLAYLIST_ID")
-
-    # generate dynamic title & description
-    title = f"{category.title()} Shorts 🌌 - {script_text[:50]}..."
-    description = script_text + "\n\n#shorts #astrology #viral"
-
-    upload_video(
-        file_path=VIDEO_FILE,
-        title=title,
-        description=description,
-        playlist_id=playlist_id
-    )
+    upload_video()
