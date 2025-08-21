@@ -1,1 +1,8 @@
-script.txt ut wqr
+TITLE: Leo Daily Horoscope | August 20, 2025
+DESCRIPTION: Discover today’s astrological insights for Leo. Learn how the stars influence your love, career, and health. Stay ahead with guidance tailored to your zodiac sign. 🌟♌
+TAGS: astrology, daily horoscope, Leo horoscope, zodiac signs, astrology shorts, horoscope 2025
+PLAYLIST: PL1234567890abcdef  # (replace with your actual playlist ID if you have one)
+
+SCRIPT:
+Today’s horoscope for Leo:
+The stars encourage you to take bold steps in your career. New opportunities may come your way, but don’t rush—patience will reward you. In relationships, communication is key today. Your energy is high, so use it to inspire others.
