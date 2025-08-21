@@ -1,9 +1,9 @@
 name: Astrology Shorts Automation
 
 on:
-  workflow_dispatch: # Run manually
+  workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *" # every 6 hours
+    - cron: "0 */6 * * *"
 
 jobs:
   generate_and_upload:
@@ -24,20 +24,19 @@ jobs:
       - name: Generate viral script
         run: python generate_script.py
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           HUGGINGFACE_API_KEY: ${{ secrets.HUGGINGFACE_API_KEY }}
 
-      - name: Generate TTS audio
+      - name: Generate TTS audio (with failover keys)
         run: python generate_tts.py
         env:
           ELEVENLABS_KEY1: ${{ secrets.ELEVENLABS_KEY1 }}
-          ELEVENLABS_KEY2: ${{ secrets.ELEVENLABS_KEY2 }} # fallback key (optional)
+          ELEVENLABS_KEY2: ${{ secrets.ELEVENLABS_KEY2 }}
+          ELEVENLABS_KEY3: ${{ secrets.ELEVENLABS_KEY3 }}
 
       - name: Create video
         run: python create_video.py
         env:
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
 
       - name: Upload to YouTube
         run: python upload.py
@@ -45,5 +44,5 @@ jobs:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-          SERIES1_PLAYLIST_ID: ${{ secrets.SERIES1_PLAYLIST_ID }} # Horoscope
-          SERIES2_PLAYLIST_ID: ${{ secrets.SERIES2_PLAYLIST_ID }} # Numerology
+          SERIES1_PLAYLIST_ID: ${{ secrets.SERIES1_PLAYLIST_ID }}
+          SERIES2_PLAYLIST_ID: ${{ secrets.SERIES2_PLAYLIST_ID }}
