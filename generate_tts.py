@@ -2,19 +2,26 @@ import os
 import requests
 import time
 
-# Collect all API keys from environment
+# Collect all API keys from environment variables
 keys = [
     os.getenv("ELEVENLABS_KEY1"),
     os.getenv("ELEVENLABS_KEY2"),
     os.getenv("ELEVENLABS_KEY3"),
 ]
 
-VOICE_ID = "EXAVITQu4vr4xnSDxMaL"  # Default ElevenLabs voice (you can change)
+VOICE_ID = "EXAVITQu4vr4xnSDxMaL"  # Default ElevenLabs voice ID
 OUTPUT_FILE = "narration.mp3"
+SCRIPT_FILE = "script.txt"
 
-# Read the script that was generated
-with open("script.txt", "r", encoding="utf-8") as f:
-    text = f.read()
+# Read the generated script
+if not os.path.exists(SCRIPT_FILE):
+    raise FileNotFoundError(f"🚨 Script file not found: {SCRIPT_FILE}")
+
+with open(SCRIPT_FILE, "r", encoding="utf-8") as f:
+    text = f.read().strip()
+
+if not text:
+    raise ValueError("🚨 Script file is empty, cannot generate TTS.")
 
 
 def generate_tts(api_key: str) -> bool:
@@ -29,7 +36,10 @@ def generate_tts(api_key: str) -> bool:
     }
     payload = {
         "text": text,
-        "voice_settings": {"stability": 0.6, "similarity_boost": 0.8},
+        "voice_settings": {
+            "stability": 0.6,
+            "similarity_boost": 0.8,
+        },
     }
 
     try:
@@ -56,7 +66,7 @@ for key in keys:
         if generate_tts(key):
             success = True
             break
-        time.sleep(2)  # wait before trying next key
+        time.sleep(2)  # Small delay before next attempt
 
 if not success:
     raise Exception("🚨 All ElevenLabs keys failed! Check your API keys or quota.")
