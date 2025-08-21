@@ -1,94 +1,95 @@
 import os
-import random
 import requests
-import moviepy.editor as mp
+import datetime
 
-PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")  # add this in GitHub secrets
+# Get API keys from GitHub secrets (env variables)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
 
-
-def fetch_assets(query, folder, limit=2):
-    """Fetch random images from Pexels and save new ones"""
-    headers = {"Authorization": PEXELS_API_KEY}
-    url = f"https://api.pexels.com/v1/search?query={query}&per_page={limit}&page={random.randint(1,50)}"
-    r = requests.get(url, headers=headers)
-
-    if r.status_code != 200:
-        print(f"⚠️ Failed to fetch assets for {query}")
-        return
-
-    data = r.json()
-    os.makedirs(folder, exist_ok=True)
-
-    for i, photo in enumerate(data.get("photos", [])):
-        img_url = photo["src"]["large"]
-        filename = f"{query}_{random.randint(1000,9999)}.jpg"
-        out_path = os.path.join(folder, filename)
-        with open(out_path, "wb") as f:
-            f.write(requests.get(img_url).content)
-        print(f"⬇️ Downloaded: {out_path}")
+SCRIPT_FILE = "script.txt"
 
 
-def pick_random_file(folder, extensions=("png", "jpg", "jpeg", "mp4")):
-    files = [f for f in os.listdir(folder) if f.lower().endswith(extensions)]
-    if not files:
+def fetch_trending_topics():
+    """Simulate trending/real-world events (placeholder)"""
+    today = datetime.datetime.now().strftime("%B %d, %Y")
+    return f"Today is {today}, and people are talking about upcoming festivals, world events, and viral trends on social media."
+
+
+def generate_with_openai(prompt):
+    import openai
+    openai.api_key = OPENAI_API_KEY
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": "You are a viral script generator for YouTube shorts."},
+                      {"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"⚠️ OpenAI error: {e}")
         return None
-    return os.path.join(folder, random.choice(files))
 
 
-def detect_series_type(script_text):
-    horoscope_keywords = ["aries", "taurus", "leo", "zodiac", "horoscope", "virgo", "capricorn", "scorpio"]
-    numerology_keywords = ["life path", "number", "destiny", "numerology", "digit"]
+def generate_with_gemini(prompt):
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+        r = requests.post(url, json={"contents": [{"parts": [{"text": prompt}]}]})
+        data = r.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception as e:
+        print(f"⚠️ Gemini error: {e}")
+        return None
 
-    text = script_text.lower()
-    if any(word in text for word in horoscope_keywords):
-        return "horoscope"
-    elif any(word in text for word in numerology_keywords):
-        return "numerology"
-    return "horoscope"
+
+def generate_with_huggingface(prompt):
+    try:
+        url = "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1"
+        headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+        r = requests.post(url, headers=headers, json={"inputs": prompt})
+        data = r.json()
+        if isinstance(data, list) and "generated_text" in data[0]:
+            return data[0]["generated_text"].strip()
+        elif isinstance(data, dict) and "error" in data:
+            print("⚠️ Hugging Face error:", data["error"])
+        return None
+    except Exception as e:
+        print(f"⚠️ Hugging Face error: {e}")
+        return None
 
 
-def create_video():
-    base_dir = os.path.dirname(__file__)
-    cache_dir = os.path.join(base_dir, "assets", "cache")
+def generate_script():
+    trending = fetch_trending_topics()
 
-    script_file = os.path.join(base_dir, "script.txt")
-    if not os.path.exists(script_file):
-        raise FileNotFoundError("❌ script.txt not found!")
-    with open(script_file, "r", encoding="utf-8") as f:
-        script_text = f.read()
+    prompt = f"""
+Generate a short viral YouTube script in an engaging, human-like tone. 
+Make it related to horoscopes, numerology, or motivation. 
+Incorporate trending world events, upcoming festivals, or viral cultural themes.
+End with strong engagement hooks (like "Follow for more", "Your sign will love this").
+Also include 5-7 trending hashtags.
 
-    series_type = detect_series_type(script_text)
-    print(f"📌 Detected series type: {series_type}")
+Trending context to include: {trending}
+"""
 
-    series_folder = os.path.join(cache_dir, series_type)
-    os.makedirs(series_folder, exist_ok=True)
+    script_text = None
 
-    # ✅ always refresh some new assets each run
-    query = "zodiac astrology" if series_type == "horoscope" else "numerology numbers cosmic"
-    fetch_assets(query, series_folder, limit=2)
+    if OPENAI_API_KEY:
+        script_text = generate_with_openai(prompt)
 
-    bg_path = pick_random_file(series_folder, ("png", "jpg", "jpeg", "mp4"))
-    overlay_path = pick_random_file(series_folder, ("png", "jpg", "jpeg"))
+    if not script_text and GEMINI_API_KEY:
+        script_text = generate_with_gemini(prompt)
 
-    audio_path = os.path.join(base_dir, "output.mp3")
-    if not os.path.exists(audio_path):
-        raise FileNotFoundError("❌ output.mp3 not found!")
+    if not script_text and HUGGINGFACE_API_KEY:
+        script_text = generate_with_huggingface(prompt)
 
-    audio = mp.AudioFileClip(audio_path)
+    if not script_text:
+        raise RuntimeError("❌ No API available. Please add at least Hugging Face API key.")
 
-    if bg_path.endswith(".mp4"):
-        background = mp.VideoFileClip(bg_path).resize(height=1080).set_duration(audio.duration)
-    else:
-        background = mp.ImageClip(bg_path).set_duration(audio.duration).resize(height=1080)
+    with open(SCRIPT_FILE, "w", encoding="utf-8") as f:
+        f.write(script_text)
 
-    overlay = mp.ImageClip(overlay_path).set_duration(audio.duration).resize(height=1080).set_opacity(0.3)
-
-    video = mp.CompositeVideoClip([background, overlay]).set_audio(audio)
-    output_path = os.path.join(base_dir, f"{series_type}_video.mp4")
-    video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac")
-
-    print(f"✅ Video saved: {output_path}")
+    print(f"✅ Script saved to {SCRIPT_FILE}")
 
 
 if __name__ == "__main__":
-    create_video()
+    generate_script()
