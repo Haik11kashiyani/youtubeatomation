@@ -18,3 +18,7 @@ requests
 
 # Instagram upload
 instagrapi
+
+# Free trends & news
+pytrends
+feedparser
