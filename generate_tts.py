@@ -1,51 +1,69 @@
 import os
 import requests
 
-ELEVENLABS_KEY = os.getenv("ELEVENLABS_KEY1")  # from GitHub secrets
-SCRIPT_FILE = "script.txt"
-OUTPUT_FILE = "output.mp3"
+# Multiple API keys for failover
+ELEVENLABS_KEYS = [
+    os.getenv("ELEVENLABS_KEY1"),
+    os.getenv("ELEVENLABS_KEY2"),
+    os.getenv("ELEVENLABS_KEY3"),
+]
 
-# You can customize the voice ID (pick from your ElevenLabs account)
-VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # default: "Rachel"
+SCRIPT_FILE = "video_meta.txt"  # auto-generated meta file
+OUTPUT_FILE = "voiceover.mp3"
 
-def generate_tts():
-    if not ELEVENLABS_KEY:
-        raise ValueError("❌ ELEVENLABS_KEY1 not found in environment variables")
+# Default voice ID (Rachel)
+VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 
-    # Read script text
+def extract_script_from_meta():
+    """Extracts only the Script text from video_meta.txt"""
     if not os.path.exists(SCRIPT_FILE):
         raise FileNotFoundError(f"❌ Script file not found: {SCRIPT_FILE}")
 
     with open(SCRIPT_FILE, "r", encoding="utf-8") as f:
-        text = f.read().strip()
+        content = f.read()
 
-    if not text:
-        raise ValueError("❌ Script file is empty")
+    if "Script:" in content:
+        script_text = content.split("Script:")[1].strip()
+    else:
+        script_text = content.strip()
 
-    print(f"🎤 Generating TTS for script: {text[:100]}...")
+    if not script_text:
+        raise ValueError("❌ No script text found in video_meta.txt")
+
+    return script_text
+
+def generate_tts():
+    script_text = extract_script_from_meta()
+    print(f"🎤 Generating TTS for script: {script_text[:100]}...")
 
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"
-    headers = {
-        "xi-api-key": ELEVENLABS_KEY,
-        "Content-Type": "application/json"
-    }
+    headers = {"Content-Type": "application/json"}
     data = {
-        "text": text,
+        "text": script_text,
         "voice_settings": {
             "stability": 0.5,
             "similarity_boost": 0.75
         }
     }
 
-    response = requests.post(url, headers=headers, json=data)
-    if response.status_code != 200:
-        raise RuntimeError(f"❌ TTS generation failed: {response.text}")
+    # Try each key until success
+    for key in ELEVENLABS_KEYS:
+        if not key:
+            continue
+        headers["xi-api-key"] = key
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+            if response.status_code == 200:
+                with open(OUTPUT_FILE, "wb") as f:
+                    f.write(response.content)
+                print(f"✅ Saved TTS audio using key ending with ...{key[-4:]} → {OUTPUT_FILE}")
+                return
+            else:
+                print(f"⚠️ Key ...{key[-4:]} failed: {response.text}")
+        except Exception as e:
+            print(f"⚠️ Error with key ...{key[-4:]}: {e}")
 
-    with open(OUTPUT_FILE, "wb") as f:
-        f.write(response.content)
-
-    print(f"✅ Saved TTS audio: {OUTPUT_FILE}")
-
+    raise RuntimeError("❌ All ElevenLabs keys failed for TTS generation")
 
 if __name__ == "__main__":
     generate_tts()
