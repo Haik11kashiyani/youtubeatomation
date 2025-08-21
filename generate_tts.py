@@ -9,22 +9,44 @@ keys = [
     os.getenv("ELEVENLABS_KEY3"),
 ]
 
-VOICE_ID = "EXAVITQu4vr4xnSDxMaL"  # Default ElevenLabs voice ID
+VOICE_ID = "EXAVITQu4vr4xnSDxMaL"  # Default ElevenLabs voice ID (change if needed)
 OUTPUT_FILE = "narration.mp3"
 SCRIPT_FILE = "script.txt"
 
-# Read the generated script
-if not os.path.exists(SCRIPT_FILE):
-    raise FileNotFoundError(f"🚨 Script file not found: {SCRIPT_FILE}")
 
-with open(SCRIPT_FILE, "r", encoding="utf-8") as f:
-    text = f.read().strip()
+def read_script() -> str:
+    """
+    Reads script.txt and extracts only the SCRIPT section.
+    """
+    if not os.path.exists(SCRIPT_FILE):
+        raise FileNotFoundError(f"🚨 Script file not found: {SCRIPT_FILE}")
 
-if not text:
-    raise ValueError("🚨 Script file is empty, cannot generate TTS.")
+    with open(SCRIPT_FILE, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    script_started = False
+    script_lines = []
+
+    for line in lines:
+        if line.strip().startswith("SCRIPT:"):
+            script_started = True
+            # Get text after "SCRIPT:" on the same line
+            content = line.replace("SCRIPT:", "").strip()
+            if content:
+                script_lines.append(content)
+            continue
+        if script_started:
+            script_lines.append(line.strip())
+
+    script_text = "\n".join(script_lines).strip()
+
+    if not script_text:
+        raise ValueError("🚨 SCRIPT section is empty in script.txt")
+
+    return script_text
 
 
-def generate_tts(api_key: str) -> bool:
+def generate_tts(api_key: str, text: str) -> bool:
     """
     Generate TTS audio with a given ElevenLabs API key.
     Returns True if successful, False otherwise.
@@ -58,15 +80,18 @@ def generate_tts(api_key: str) -> bool:
         return False
 
 
-# Try each key until one works
-success = False
-for key in keys:
-    if key:
-        print(f"🔑 Trying ElevenLabs key {key[:6]}...")
-        if generate_tts(key):
-            success = True
-            break
-        time.sleep(2)  # Small delay before next attempt
+if __name__ == "__main__":
+    # Extract only SCRIPT section
+    text = read_script()
 
-if not success:
-    raise Exception("🚨 All ElevenLabs keys failed! Check your API keys or quota.")
+    success = False
+    for key in keys:
+        if key:
+            print(f"🔑 Trying ElevenLabs key {key[:6]}...")
+            if generate_tts(key, text):
+                success = True
+                break
+            time.sleep(2)  # Small delay before next attempt
+
+    if not success:
+        raise Exception("🚨 All ElevenLabs keys failed! Check your API keys or quota.")
