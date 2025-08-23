@@ -2,7 +2,7 @@ import os
 import requests
 import random
 import re
-from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip
+from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip, CompositeVideoClip
 
 # Config
 PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY")
@@ -14,39 +14,16 @@ DOWNLOAD_DIR = "clips"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
-def clean_and_extract_keywords(text: str, max_keywords=6):
-    """
-    Extract meaningful keywords from text.
-    - Removes stopwords and short words
-    - Picks nouns / main content words if possible
-    """
-    try:
-        import nltk
-        from nltk.corpus import stopwords
-        from nltk.tokenize import word_tokenize
-        from nltk.tag import pos_tag
+def split_sentences(text: str):
+    """Basic sentence splitter (periods, ?, !)"""
+    sentences = re.split(r'(?<=[.!?]) +', text.strip())
+    return [s.strip() for s in sentences if s.strip()]
 
-        nltk.download("punkt", quiet=True)
-        nltk.download("averaged_perceptron_tagger", quiet=True)
-        nltk.download("stopwords", quiet=True)
 
-        words = word_tokenize(text)
-        words = [w.lower() for w in words if w.isalpha()]
-        stop_words = set(stopwords.words("english"))
-        words = [w for w in words if w not in stop_words]
-
-        # Extract only nouns
-        tagged = pos_tag(words)
-        nouns = [word for word, tag in tagged if tag.startswith("NN")]
-
-        # Pick random sample of nouns
-        keywords = random.sample(nouns, min(max_keywords, len(nouns)))
-        return keywords if keywords else words[:max_keywords]
-
-    except Exception:
-        # Fallback: just pick long words
-        words = re.findall(r"\b[a-zA-Z]{5,}\b", text)
-        return random.sample(words, min(max_keywords, len(words)))
+def extract_keyword(sentence: str):
+    """Pick a keyword from a sentence"""
+    words = re.findall(r"\b[a-zA-Z]{5,}\b", sentence)
+    return random.choice(words) if words else "astrology"
 
 
 def search_pixabay(query: str, max_results=5):
@@ -79,26 +56,39 @@ def download_video(url: str, filename: str):
 
 
 def build_video():
-    # Read script text
+    # Load script sentences
     with open(SCRIPT_FILE, "r", encoding="utf-8") as f:
-        script = f.read()
+        text = f.read()
+    sentences = split_sentences(text)
 
-    # Extract better keywords
-    keywords = clean_and_extract_keywords(script)
-    print(f"🔍 Keywords for Pixabay search: {keywords}")
+    # Load narration audio
+    if not os.path.exists(NARRATION_FILE):
+        raise FileNotFoundError("🚨 Narration file not found.")
+    narration = AudioFileClip(NARRATION_FILE)
+    narration_duration = narration.duration
 
+    # Allocate duration per sentence
+    per_sentence = narration_duration / len(sentences)
     clips = []
 
-    for word in keywords:
-        urls = search_pixabay(word, max_results=3)
+    for i, sentence in enumerate(sentences):
+        keyword = extract_keyword(sentence)
+        urls = search_pixabay(keyword, max_results=3)
         if not urls:
             continue
 
         video_url = random.choice(urls)
-        filename = os.path.join(DOWNLOAD_DIR, f"{word}.mp4")
+        filename = os.path.join(DOWNLOAD_DIR, f"{keyword}_{i}.mp4")
         if download_video(video_url, filename):
             try:
-                clip = VideoFileClip(filename).subclip(0, 5)  # first 5s
+                clip = VideoFileClip(filename)
+                # Cut or loop to fit per_sentence duration
+                if clip.duration > per_sentence:
+                    clip = clip.subclip(0, per_sentence)
+                else:
+                    # If clip is short, loop it
+                    loops = int(per_sentence // clip.duration) + 1
+                    clip = concatenate_videoclips([clip] * loops).subclip(0, per_sentence)
                 clips.append(clip)
             except Exception as e:
                 print(f"⚠️ Error loading {filename}: {e}")
@@ -106,15 +96,8 @@ def build_video():
     if not clips:
         raise Exception("🚨 No clips could be downloaded from Pixabay.")
 
-    # Concatenate clips
-    final_clip = concatenate_videoclips(clips, method="compose")
-
-    # Add narration
-    if os.path.exists(NARRATION_FILE):
-        narration = AudioFileClip(NARRATION_FILE)
-        final_clip = final_clip.set_audio(narration)
-    else:
-        print("⚠️ Narration file not found. Exporting video without audio.")
+    # Concatenate and sync with narration
+    final_clip = concatenate_videoclips(clips, method="compose").set_audio(narration)
 
     # Export final video
     final_clip.write_videofile(OUTPUT_FILE, codec="libx264", audio_codec="aac", fps=24)
