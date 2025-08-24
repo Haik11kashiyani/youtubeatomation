@@ -1,9 +1,9 @@
 name: Astrology Shorts Automation
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 */6 * * *"
+# on:
+#   workflow_dispatch:
+#   schedule:
+#     - cron: "0 */6 * * *"
 
 jobs:
   generate_and_upload:
