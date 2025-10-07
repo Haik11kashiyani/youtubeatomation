@@ -5,7 +5,8 @@ google-api-python-client
 google-auth-httplib2
 
 # Video creation
-moviepy
+moviepy==1.0.3
+imageio-ffmpeg
 ffmpeg-python
 pillow
 

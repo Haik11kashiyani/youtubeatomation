@@ -50,7 +50,16 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install --no-cache-dir -r requirements.txt
           python -c "import sys; print(sys.version)"
-          python -c "import moviepy; print('moviepy', moviepy.__version__)"
+          python - << 'PY'
+import pkgutil
+import importlib
+print('Checking moviepy...')
+m = importlib.import_module('moviepy')
+print('moviepy version:', getattr(m, '__version__', 'unknown'))
+from importlib import import_module
+import_module('moviepy.editor')
+print('moviepy.editor import OK')
+PY
 
       - name: List project files
         run: |
