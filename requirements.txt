@@ -7,18 +7,7 @@ google-auth-httplib2
 # Video creation
 moviepy
 ffmpeg-python
-opencv-python
+pillow
 
-# Image & media download
+# Networking
 requests
-pixabay
-
-# TTS (ElevenLabs)
-requests
-
-# Instagram upload
-instagrapi
-
-# Free trends & news
-pytrends
-feedparser
