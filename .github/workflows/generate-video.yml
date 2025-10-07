@@ -85,6 +85,7 @@ jobs:
           python orchestrate.py
 
       - name: Find generated videos
+        if: ${{ always() }}
         id: find_out
         run: |
           shopt -s nullglob
@@ -93,7 +94,7 @@ jobs:
           printf 'files=%s\n' "${vids[*]}" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifact (videos)
-        if: steps.find_out.outputs.files != ''
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: generated-videos
