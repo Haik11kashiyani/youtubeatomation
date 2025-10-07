@@ -6,9 +6,11 @@ from moviepy.editor import (
     ImageClip,
     ColorClip,
     CompositeVideoClip,
-    TextClip,
     AudioFileClip,
 )
+from PIL import Image, ImageDraw, ImageFont
+import numpy as np
+import textwrap
 
 
 BASE_DIR = os.path.dirname(__file__)
@@ -73,17 +75,81 @@ def find_image_path(filename: str) -> Optional[str]:
 
 
 def build_text_clip(text: str, fontsize: int, color: str, font_path: str, stroke_color: Optional[str] = None, stroke_width: int = 0, method: str = "caption", size: Optional[Tuple[int, int]] = None):
-    # MoviePy TextClip supports font by name when installed system-wide. We will use method="caption" with font set to the path via 'font' arg when possible.
-    return TextClip(
-        txt=text,
-        fontsize=fontsize,
-        color=color,
-        font=font_path,
-        stroke_color=stroke_color,
-        stroke_width=stroke_width,
-        method=method,
-        size=size,
-    )
+    """Render text to an image using Pillow to avoid ImageMagick dependency, then wrap as an ImageClip.
+
+    The 'size' parameter is interpreted as (max_width, None). Height is dynamic based on wrapping.
+    """
+    max_width = None
+    if size and isinstance(size, tuple):
+        max_width = size[0]
+
+    # Load font
+    font = ImageFont.truetype(font_path, fontsize)
+
+    # Determine wrap width by approximating characters per line
+    # We'll iteratively wrap to fit within max_width if provided
+    lines: list[str] = []
+    if max_width is None:
+        lines = text.split("\n")
+    else:
+        draw_probe = ImageDraw.Draw(Image.new("RGB", (10, 10), (255, 255, 255)))
+        for paragraph in text.split("\n"):
+            if not paragraph:
+                lines.append("")
+                continue
+            words = paragraph.split()
+            current = ""
+            for w in words:
+                candidate = (current + (" " if current else "") + w)
+                bbox = draw_probe.textbbox((0, 0), candidate, font=font)
+                if bbox[2] <= max_width:
+                    current = candidate
+                else:
+                    if current:
+                        lines.append(current)
+                    current = w
+            if current:
+                lines.append(current)
+
+    # Compute text size
+    padding_x = 0
+    padding_y = 0
+    draw_probe = ImageDraw.Draw(Image.new("RGB", (10, 10), (255, 255, 255)))
+    line_heights: list[int] = []
+    max_line_width = 0
+    for line in lines:
+        bbox = draw_probe.textbbox((0, 0), line, font=font)
+        w = bbox[2] - bbox[0]
+        h = bbox[3] - bbox[1]
+        line_heights.append(h)
+        max_line_width = max(max_line_width, w)
+
+    total_height = sum(line_heights) + max(0, len(lines) - 1) * int(fontsize * 0.4)
+    total_width = max_line_width
+    if max_width is not None:
+        total_width = min(max_width, max(max_line_width, 1))
+
+    img = Image.new("RGBA", (max(total_width + padding_x * 2, 1), max(total_height + padding_y * 2, 1)), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(img)
+
+    y = padding_y
+    for i, line in enumerate(lines):
+        bbox = draw.textbbox((0, 0), line, font=font)
+        w = bbox[2] - bbox[0]
+        h = bbox[3] - bbox[1]
+        x = padding_x + max((total_width - w) // 2, 0)  # center align
+        if stroke_color and stroke_width > 0:
+            # simple stroke by drawing text multiple times
+            for dx in range(-stroke_width, stroke_width + 1):
+                for dy in range(-stroke_width, stroke_width + 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    draw.text((x + dx, y + dy), line, font=font, fill=stroke_color)
+        draw.text((x, y), line, font=font, fill=color)
+        y += h + int(fontsize * 0.4)
+
+    arr = np.array(img)
+    return ImageClip(arr)
 
 
 def split_content_to_segments(content: str, total_duration: float, min_segment: float = 3.0, max_segment: float = 7.0) -> List[str]:
