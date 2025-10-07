@@ -127,6 +127,13 @@ def _select_music_from_hint(hint: str) -> Optional[str]:
     except Exception:
         return None
 
+def _shorten(text: str, max_chars: int) -> str:
+    if not text:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 1] + "…"
+
 
 def compose_short(block: Dict[str, str]):
     # Use only TITLE on video per requirement
@@ -179,22 +186,23 @@ def compose_short(block: Dict[str, str]):
 
     content_box_width = WIDTH - 200
     y_start = 720
+    # Cap content length and box height to avoid ImageMagick caption size limits
     part1 = build_text_clip(
-        text=part1_text,
-        fontsize=48,
+        text=_shorten(part1_text, 700),
+        fontsize=44,
         color="black",
         font_path=GUJ_FONT_REGULAR,
         method="caption",
-        size=(content_box_width, 1000),
+        size=(content_box_width, 700),
     ).set_start(0).set_duration(15.0).set_position(("center", y_start)).fadein(0.6).fadeout(0.6)
 
     part2 = build_text_clip(
-        text=part2_text or part1_text,  # fallback if only one block
-        fontsize=48,
+        text=_shorten(part2_text or part1_text, 700),  # fallback if only one block
+        fontsize=44,
         color="black",
         font_path=GUJ_FONT_REGULAR,
         method="caption",
-        size=(content_box_width, 1000),
+        size=(content_box_width, 700),
     ).set_start(15.0).set_duration(15.0).set_position(("center", y_start)).fadein(0.6).fadeout(0.6)
 
     # Compose layers
