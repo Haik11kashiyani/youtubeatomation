@@ -1,6 +1,7 @@
 # youtube_upload.py
 import os
 from typing import List, Dict
+import unicodedata
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -41,12 +42,28 @@ def read_blocks(script_path: str) -> List[Dict[str, str]]:
         blocks.append(data)
     return blocks
 
+def _sanitize_title(raw: str) -> str:
+    if not raw:
+        return "Short"
+    # Normalize, strip control characters, trim whitespace, enforce max 100 chars
+    normalized = unicodedata.normalize("NFKC", str(raw))
+    cleaned = "".join(ch for ch in normalized if ch.isprintable())
+    cleaned = cleaned.strip()
+    if not cleaned:
+        cleaned = "Short"
+    if len(cleaned) > 100:
+        cleaned = cleaned[:97] + "..."
+    return cleaned
+
+
 def upload_video(file_path="final_video.mp4", title: str = "Astrology Shorts", description: str = "Daily astrology", tags: List[str] | None = None, playlist_id: str | None = None):
     service = get_youtube_service()
 
     media = MediaFileUpload(file_path, chunksize=-1, resumable=True, mimetype="video/*")
+    safe_title = _sanitize_title(title)
+    safe_description = (description or "").strip()
     body = {
-        "snippet": {"title": title, "description": description, "tags": tags or []},
+        "snippet": {"title": safe_title, "description": safe_description, "tags": tags or []},
         "status": {"privacyStatus": "public"}
     }
     request = service.videos().insert(part="snippet,status", body=body, media_body=media)
