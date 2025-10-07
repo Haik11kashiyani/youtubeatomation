@@ -159,7 +159,7 @@ def compose_short(block: Dict[str, str]):
         color="black",
         font_path=GUJ_FONT_BOLD,
         method="caption",
-        size=(title_box_width, None),
+        size=(title_box_width, 220),
     ).set_position(("center", 560))
     title_intro = base_title.set_start(0).set_duration(2.0).fadein(0.6).fadeout(0.6)
     title_outro = base_title.set_start(28.0).set_duration(2.0).fadein(0.6).fadeout(0.4)
@@ -185,7 +185,7 @@ def compose_short(block: Dict[str, str]):
         color="black",
         font_path=GUJ_FONT_REGULAR,
         method="caption",
-        size=(content_box_width, None),
+        size=(content_box_width, 1000),
     ).set_start(0).set_duration(15.0).set_position(("center", y_start)).fadein(0.6).fadeout(0.6)
 
     part2 = build_text_clip(
@@ -194,7 +194,7 @@ def compose_short(block: Dict[str, str]):
         color="black",
         font_path=GUJ_FONT_REGULAR,
         method="caption",
-        size=(content_box_width, None),
+        size=(content_box_width, 1000),
     ).set_start(15.0).set_duration(15.0).set_position(("center", y_start)).fadein(0.6).fadeout(0.6)
 
     # Compose layers
