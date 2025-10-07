@@ -36,6 +36,14 @@ jobs:
           sudo apt-get install -y ffmpeg imagemagick
           ffmpeg -version
           convert --version
+          echo "--- ImageMagick policy before ---"
+          sudo awk '1; END{print ""}' /etc/ImageMagick-6/policy.xml || true
+          # Relax ImageMagick policy to allow @args used by MoviePy TextClip
+          if [ -f /etc/ImageMagick-6/policy.xml ]; then
+            sudo sed -i 's/<policy domain="path" rights="none" pattern="@\*"\/>/<!-- disabled by CI: allow @args for MoviePy -->/g' /etc/ImageMagick-6/policy.xml
+          fi
+          echo "--- ImageMagick policy after ---"
+          sudo awk '1; END{print ""}' /etc/ImageMagick-6/policy.xml || true
 
       - name: Cache pip
         uses: actions/cache@v4
