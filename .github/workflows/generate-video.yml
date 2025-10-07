@@ -19,11 +19,8 @@ permissions:
 
 jobs:
   build:
-    name: Run generator
+    name: Render and upload shorts
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: youtubeatomation
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,15 +30,22 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install system dependencies (ffmpeg, ImageMagick)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg imagemagick
+          ffmpeg -version
+          convert --version
+
       - name: Cache pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('youtubeatomation/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
@@ -52,24 +56,17 @@ jobs:
           ls -la "12 photos" || true
           ls -la fonts || true
 
-      - name: Run generator
+      - name: Render shorts
         env:
-          # Add any required secrets here if your scripts need them
-          # EXAMPLE_SECRET: ${{ secrets.EXAMPLE_SECRET }}
           PYTHONUNBUFFERED: "1"
         run: |
-          set -e
-          echo "Runner: ${{ github.event.inputs.runner || 'build_shorts.py' }}"
-          if [ -n "${{ github.event.inputs.script_file }}" ]; then
-            echo "Using script file: ${{ github.event.inputs.script_file }}"
-          fi
-          python "${{ github.event.inputs.runner || 'build_shorts.py' }}"
+          python create_video.py
 
       - name: Find generated videos
         id: find_out
         run: |
           shopt -s nullglob
-          vids=( *.mp4 *.mov *.mkv )
+          vids=( outputs/*.mp4 outputs/*.mov outputs/*.mkv )
           echo "Found: ${vids[@]}"
           printf 'files=%s\n' "${vids[*]}" >> "$GITHUB_OUTPUT"
 
@@ -79,9 +76,9 @@ jobs:
         with:
           name: generated-videos
           path: |
-            youtubeatomation/*.mp4
-            youtubeatomation/*.mov
-            youtubeatomation/*.mkv
+            outputs/*.mp4
+            outputs/*.mov
+            outputs/*.mkv
           if-no-files-found: warn
 
       - name: Upload logs and intermediates
@@ -89,43 +86,43 @@ jobs:
         with:
           name: run-logs
           path: |
-            youtubeatomation/**/*.log
-            youtubeatomation/**/*.txt
-            !youtubeatomation/requirements.txt
+            **/*.log
+            **/*.txt
+            !requirements.txt
           if-no-files-found: ignore
 
-  # Optional job that could upload to YouTube if you wire up secrets.
-  # Keep disabled until secrets are configured and OAuth is handled headlessly.
-  # upload:
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: read
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #     - name: Set up Python
-  #       uses: actions/setup-python@v5
-  #       with:
-  #         python-version: '3.11'
-  #     - name: Install dependencies
-  #       working-directory: youtubeatomation
-  #       run: |
-  #         python -m pip install --upgrade pip
-  #         pip install -r requirements.txt
-  #     - name: Download generated videos
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: generated-videos
-  #         path: youtubeatomation
-  #     - name: Upload to YouTube
-  #       working-directory: youtubeatomation
-  #       env:
-  #         # Map your GitHub repo secrets here
-  #         # YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
-  #         # YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
-  #         # YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-  #       run: |
-  #         python youtube_upload.py
+  upload:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Download generated videos
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-videos
+          path: .
+      - name: Upload to YouTube
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: |
+          python youtube_upload.py
 
 
