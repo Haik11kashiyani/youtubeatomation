@@ -1,4 +1,4 @@
-name: Generate Video
+name: Generate and Upload Shorts (Sequential)
 
 on:
   workflow_dispatch:
@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   build:
-    name: Render and upload shorts (sequential)
+    name: Render and upload shorts sequentially
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -56,19 +56,14 @@ jobs:
           ls -la "12 photos" || true
           ls -la fonts || true
 
-      - name: Render shorts
+      - name: Render and upload sequentially
         env:
           PYTHONUNBUFFERED: "1"
-        run: |
-          python create_video.py
-
-      - name: Upload shorts sequentially
-        env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
         run: |
-          python youtube_upload.py
+          python orchestrate.py
 
       - name: Find generated videos
         id: find_out
@@ -99,6 +94,6 @@ jobs:
             !requirements.txt
           if-no-files-found: ignore
 
-  # no second job; uploads happen sequentially in build job
+  # Upload job removed; upload happens inline in the build job
 
 
