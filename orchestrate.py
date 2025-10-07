@@ -1,7 +1,7 @@
 import os
 from typing import Dict
 
-from create_video import (
+from build_shorts import (
     read_script_blocks,
     compose_short,
     OUTPUT_DIR,
