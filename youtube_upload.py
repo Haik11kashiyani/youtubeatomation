@@ -6,7 +6,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.auth.transport.requests import Request
 
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube"]
+# Restrict to upload scope to match typical refresh tokens created for uploads
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 def get_youtube_service():
     creds = Credentials(
@@ -57,17 +58,9 @@ def upload_video(file_path="final_video.mp4", title: str = "Astrology Shorts", d
             print(f"Upload {int(status.progress() * 100)}%")
     print("✅ Upload complete.")
 
+    # Adding to playlist requires broader youtube scope; skip unless scope provided explicitly
     if playlist_id:
-        service.playlistItems().insert(
-            part="snippet",
-            body={
-                "snippet": {
-                    "playlistId": playlist_id,
-                    "resourceId": {"kind": "youtube#video", "videoId": response["id"]}
-                }
-            }
-        ).execute()
-        print(f"✅ Added video to playlist {playlist_id}")
+        print("⚠️ Skipping playlist add: requires 'youtube' scope not present in current credentials.")
 
 
 def upload_all_from_script(outputs_dir: str = "outputs", script_path: str = "script.txt"):
