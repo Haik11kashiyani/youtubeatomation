@@ -73,7 +73,7 @@ def find_image_path(filename: str) -> Optional[str]:
     return candidate if os.path.exists(candidate) else None
 
 
-def build_text_clip(text: str, fontsize: int, color: str, font_path: str, stroke_color: Optional[str] = None, stroke_width: int = 0, method: str = "caption", size: Optional[Tuple[int, int]] = None):
+def build_text_clip(text: str, fontsize: int, color: str, font_path: str, stroke_color: Optional[str] = None, stroke_width: int = 0, method: str = "caption", size: Optional[Tuple[int, int]] = None, align: str = "center"):
     # MoviePy TextClip supports font by name when installed system-wide. We will use method="caption" with font set to the path via 'font' arg when possible.
     return TextClip(
         txt=text,
@@ -84,6 +84,7 @@ def build_text_clip(text: str, fontsize: int, color: str, font_path: str, stroke
         stroke_width=stroke_width,
         method=method,
         size=size,
+        align=align,
     )
 
 
@@ -133,6 +134,36 @@ def _shorten(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
     return text[: max_chars - 1] + "…"
+
+def _paginate_text(text: str, max_chars_per_page: int) -> List[str]:
+    if not text:
+        return [""]
+    chunks: List[str] = []
+    current: List[str] = []
+    count = 0
+    # Prefer splitting by lines/paragraphs
+    units = [u.strip() for u in re.split(r"\n\s*\n|\n", text) if u.strip()]
+    if not units:
+        units = [text]
+    for u in units:
+        if count + len(u) + 1 <= max_chars_per_page:
+            current.append(u)
+            count += len(u) + 1
+        else:
+            if current:
+                chunks.append("\n".join(current))
+            # Very long single unit fallback: hard cut
+            if len(u) > max_chars_per_page:
+                for i in range(0, len(u), max_chars_per_page):
+                    chunks.append(u[i:i + max_chars_per_page])
+                current = []
+                count = 0
+            else:
+                current = [u]
+                count = len(u)
+    if current:
+        chunks.append("\n".join(current))
+    return chunks or [text]
 
 
 def compose_short(block: Dict[str, str]):
@@ -187,31 +218,52 @@ def compose_short(block: Dict[str, str]):
     content_box_width = WIDTH - 200
     y_start = 720
     # Cap content length and box height to avoid ImageMagick caption size limits
-    part1 = build_text_clip(
-        text=_shorten(part1_text, 700),
-        fontsize=44,
-        color="black",
-        font_path=GUJ_FONT_REGULAR,
-        method="caption",
-        size=(content_box_width, 700),
-    ).set_start(0).set_duration(15.0).set_position(("center", y_start)).fadein(0.6).fadeout(0.6)
+    part1_pages = _paginate_text(part1_text, max_chars_per_page=280)
+    part1_clips: List[TextClip] = []
+    if not part1_pages:
+        part1_pages = [""]
+    per_page = max(3.0, 15.0 / len(part1_pages))
+    t = 0.0
+    for p in part1_pages:
+        c = build_text_clip(
+            text=p,
+            fontsize=44,
+            color="black",
+            font_path=GUJ_FONT_REGULAR,
+            method="caption",
+            size=(content_box_width, 620),
+            align="west",
+        ).set_start(t).set_duration(per_page).set_position(("center", y_start)).fadein(0.4).fadeout(0.4)
+        part1_clips.append(c)
+        t += per_page
 
-    part2 = build_text_clip(
-        text=_shorten(part2_text or part1_text, 700),  # fallback if only one block
-        fontsize=44,
-        color="black",
-        font_path=GUJ_FONT_REGULAR,
-        method="caption",
-        size=(content_box_width, 700),
-    ).set_start(15.0).set_duration(15.0).set_position(("center", y_start)).fadein(0.6).fadeout(0.6)
+    second_text = part2_text or part1_text
+    part2_pages = _paginate_text(second_text, max_chars_per_page=280)
+    part2_clips: List[TextClip] = []
+    if not part2_pages:
+        part2_pages = [""]
+    per_page2 = max(3.0, 15.0 / len(part2_pages))
+    t = 15.0
+    for p in part2_pages:
+        c = build_text_clip(
+            text=p,
+            fontsize=44,
+            color="black",
+            font_path=GUJ_FONT_REGULAR,
+            method="caption",
+            size=(content_box_width, 620),
+            align="west",
+        ).set_start(t).set_duration(per_page2).set_position(("center", y_start)).fadein(0.4).fadeout(0.4)
+        part2_clips.append(c)
+        t += per_page2
 
     # Compose layers
     layers = [bg]
     layers.extend(img_intro_outro)
     layers.append(title_intro)
     layers.append(title_outro)
-    layers.append(part1)
-    layers.append(part2)
+    layers.extend(part1_clips)
+    layers.extend(part2_clips)
 
     composite = CompositeVideoClip(layers, size=(WIDTH, HEIGHT)).set_duration(DURATION)
 
