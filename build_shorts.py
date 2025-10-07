@@ -1,16 +1,15 @@
 import os
 import re
 from typing import List, Dict, Optional, Tuple
+import difflib
 
 from moviepy.editor import (
     ImageClip,
     ColorClip,
     CompositeVideoClip,
+    TextClip,
     AudioFileClip,
 )
-from PIL import Image, ImageDraw, ImageFont
-import numpy as np
-import textwrap
 
 
 BASE_DIR = os.path.dirname(__file__)
@@ -75,81 +74,17 @@ def find_image_path(filename: str) -> Optional[str]:
 
 
 def build_text_clip(text: str, fontsize: int, color: str, font_path: str, stroke_color: Optional[str] = None, stroke_width: int = 0, method: str = "caption", size: Optional[Tuple[int, int]] = None):
-    """Render text to an image using Pillow to avoid ImageMagick dependency, then wrap as an ImageClip.
-
-    The 'size' parameter is interpreted as (max_width, None). Height is dynamic based on wrapping.
-    """
-    max_width = None
-    if size and isinstance(size, tuple):
-        max_width = size[0]
-
-    # Load font
-    font = ImageFont.truetype(font_path, fontsize)
-
-    # Determine wrap width by approximating characters per line
-    # We'll iteratively wrap to fit within max_width if provided
-    lines: list[str] = []
-    if max_width is None:
-        lines = text.split("\n")
-    else:
-        draw_probe = ImageDraw.Draw(Image.new("RGB", (10, 10), (255, 255, 255)))
-        for paragraph in text.split("\n"):
-            if not paragraph:
-                lines.append("")
-                continue
-            words = paragraph.split()
-            current = ""
-            for w in words:
-                candidate = (current + (" " if current else "") + w)
-                bbox = draw_probe.textbbox((0, 0), candidate, font=font)
-                if bbox[2] <= max_width:
-                    current = candidate
-                else:
-                    if current:
-                        lines.append(current)
-                    current = w
-            if current:
-                lines.append(current)
-
-    # Compute text size
-    padding_x = 0
-    padding_y = 0
-    draw_probe = ImageDraw.Draw(Image.new("RGB", (10, 10), (255, 255, 255)))
-    line_heights: list[int] = []
-    max_line_width = 0
-    for line in lines:
-        bbox = draw_probe.textbbox((0, 0), line, font=font)
-        w = bbox[2] - bbox[0]
-        h = bbox[3] - bbox[1]
-        line_heights.append(h)
-        max_line_width = max(max_line_width, w)
-
-    total_height = sum(line_heights) + max(0, len(lines) - 1) * int(fontsize * 0.4)
-    total_width = max_line_width
-    if max_width is not None:
-        total_width = min(max_width, max(max_line_width, 1))
-
-    img = Image.new("RGBA", (max(total_width + padding_x * 2, 1), max(total_height + padding_y * 2, 1)), (255, 255, 255, 0))
-    draw = ImageDraw.Draw(img)
-
-    y = padding_y
-    for i, line in enumerate(lines):
-        bbox = draw.textbbox((0, 0), line, font=font)
-        w = bbox[2] - bbox[0]
-        h = bbox[3] - bbox[1]
-        x = padding_x + max((total_width - w) // 2, 0)  # center align
-        if stroke_color and stroke_width > 0:
-            # simple stroke by drawing text multiple times
-            for dx in range(-stroke_width, stroke_width + 1):
-                for dy in range(-stroke_width, stroke_width + 1):
-                    if dx == 0 and dy == 0:
-                        continue
-                    draw.text((x + dx, y + dy), line, font=font, fill=stroke_color)
-        draw.text((x, y), line, font=font, fill=color)
-        y += h + int(fontsize * 0.4)
-
-    arr = np.array(img)
-    return ImageClip(arr)
+    # MoviePy TextClip supports font by name when installed system-wide. We will use method="caption" with font set to the path via 'font' arg when possible.
+    return TextClip(
+        txt=text,
+        fontsize=fontsize,
+        color=color,
+        font=font_path,
+        stroke_color=stroke_color,
+        stroke_width=stroke_width,
+        method=method,
+        size=size,
+    )
 
 
 def split_content_to_segments(content: str, total_duration: float, min_segment: float = 3.0, max_segment: float = 7.0) -> List[str]:
@@ -171,8 +106,31 @@ def split_content_to_segments(content: str, total_duration: float, min_segment: 
     return paragraphs
 
 
+def _select_music_from_hint(hint: str) -> Optional[str]:
+    if not hint:
+        return None
+    # Search audio files in ASSETS_DIR and fuzzy-match by filename
+    try:
+        candidates = []
+        for name in os.listdir(ASSETS_DIR):
+            if name.lower().endswith((".mp3", ".wav", ".m4a", ".ogg")):
+                candidates.append(name)
+        if not candidates:
+            return None
+        scores = [
+            (difflib.SequenceMatcher(None, hint.lower(), c.lower()).ratio(), c)
+            for c in candidates
+        ]
+        scores.sort(reverse=True)
+        best = scores[0][1]
+        return os.path.join(ASSETS_DIR, best)
+    except Exception:
+        return None
+
+
 def compose_short(block: Dict[str, str]):
-    title_text = block.get("YOUTUBE_SHORT_TITLE") or block.get("TITLE") or ""
+    # Use only TITLE on video per requirement
+    title_text = block.get("TITLE") or ""
     content_text = block.get("CONTENT", "")
     image_file = block.get("IMAGE", "")
     bg_music_hint = block.get("BG_MUSIC", "")
@@ -180,69 +138,79 @@ def compose_short(block: Dict[str, str]):
     # Base white background
     bg = ColorClip(size=(WIDTH, HEIGHT), color=(255, 255, 255)).set_duration(DURATION)
 
-    # Rashi image at the top with fade in
+    # Rashi image at the top
     img_path = find_image_path(image_file)
+    img_intro_outro = []
     if img_path:
-        img_clip = ImageClip(img_path).set_duration(DURATION)
-        # Fit width with preserved aspect ratio, occupy top area (approx 40% height max)
+        base_img = ImageClip(img_path)
         target_width = WIDTH - 160
-        img_clip = img_clip.resize(width=target_width)
-        # Position top centered with some margin
-        top_margin = 60
-        img_clip = img_clip.set_position(("center", top_margin)).fadein(0.6)
-    else:
-        img_clip = None
+        base_img = base_img.resize(width=target_width).set_position(("center", 60))
+        # Intro (0-2s)
+        img_intro = base_img.set_start(0).set_duration(2.0).fadein(0.6).fadeout(0.6)
+        # Outro (28-30s)
+        img_outro = base_img.set_start(28.0).set_duration(2.0).fadein(0.6).fadeout(0.4)
+        img_intro_outro = [img_intro, img_outro]
 
-    # Title bold Gujarati, under image, always visible
+    # Title (intro/outro only)
     title_box_width = WIDTH - 160
-    title_clip = build_text_clip(
+    base_title = build_text_clip(
         text=title_text,
         fontsize=64,
         color="black",
         font_path=GUJ_FONT_BOLD,
         method="caption",
         size=(title_box_width, None),
-    ).set_duration(DURATION).set_position(("center", 560)).fadein(0.6)
+    ).set_position(("center", 560))
+    title_intro = base_title.set_start(0).set_duration(2.0).fadein(0.6).fadeout(0.6)
+    title_outro = base_title.set_start(28.0).set_duration(2.0).fadein(0.6).fadeout(0.4)
 
-    # Content segments change over time
-    segments = split_content_to_segments(content_text, DURATION)
-    # Allocate time evenly with small fade cross
-    fade = 0.4
-    seg_duration = max(2.5, (DURATION - fade * (len(segments) + 1)) / max(1, len(segments)))
+    # Split content into two 15-second parts
+    # First, break content into paragraphs/sentences then distribute roughly half-half
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", content_text) if p.strip()]
+    if not paragraphs:
+        sentences = re.split(r"(?<=[.!?\u0964\u0965])\s+", content_text)
+        paragraphs = [s.strip() for s in sentences if s.strip()]
+    if not paragraphs:
+        paragraphs = [content_text.strip()]
 
-    content_clips = []
-    y_start = 720
+    mid = max(1, len(paragraphs) // 2)
+    part1_text = "\n\n".join(paragraphs[:mid])
+    part2_text = "\n\n".join(paragraphs[mid:]) if len(paragraphs) > 1 else ""
+
     content_box_width = WIDTH - 200
-    t = fade
-    for seg in segments:
-        c = build_text_clip(
-            text=seg,
-            fontsize=48,
-            color="black",
-            font_path=GUJ_FONT_REGULAR,
-            method="caption",
-            size=(content_box_width, None),
-        ).set_duration(seg_duration).set_start(t).set_position(("center", y_start)).fadein(fade)
-        content_clips.append(c)
-        t += seg_duration
+    y_start = 720
+    part1 = build_text_clip(
+        text=part1_text,
+        fontsize=48,
+        color="black",
+        font_path=GUJ_FONT_REGULAR,
+        method="caption",
+        size=(content_box_width, None),
+    ).set_start(0).set_duration(15.0).set_position(("center", y_start)).fadein(0.6).fadeout(0.6)
+
+    part2 = build_text_clip(
+        text=part2_text or part1_text,  # fallback if only one block
+        fontsize=48,
+        color="black",
+        font_path=GUJ_FONT_REGULAR,
+        method="caption",
+        size=(content_box_width, None),
+    ).set_start(15.0).set_duration(15.0).set_position(("center", y_start)).fadein(0.6).fadeout(0.6)
 
     # Compose layers
     layers = [bg]
-    if img_clip is not None:
-        layers.append(img_clip)
-    layers.append(title_clip)
-    layers.extend(content_clips)
+    layers.extend(img_intro_outro)
+    layers.append(title_intro)
+    layers.append(title_outro)
+    layers.append(part1)
+    layers.append(part2)
 
     composite = CompositeVideoClip(layers, size=(WIDTH, HEIGHT)).set_duration(DURATION)
 
-    # Audio: optional background music file name under assets if exists
+    # Audio: choose by hint using fuzzy match, else default music.mp3
     music_path = None
     if bg_music_hint:
-        # try direct file name in assets
-        hint_candidate = os.path.join(ASSETS_DIR, bg_music_hint)
-        if os.path.exists(hint_candidate):
-            music_path = hint_candidate
-    # also support a default music.mp3 in assets
+        music_path = _select_music_from_hint(bg_music_hint)
     if music_path is None:
         default_music = os.path.join(ASSETS_DIR, "music.mp3")
         if os.path.exists(default_music):
@@ -251,11 +219,6 @@ def compose_short(block: Dict[str, str]):
     if music_path:
         try:
             music = AudioFileClip(music_path).volumex(0.25)
-            if music.duration < DURATION:
-                # loop music to fill
-                loops = int(DURATION // music.duration) + 1
-                music = AudioFileClip(music_path).fx(lambda clip: clip)
-                # simple loop by concatenating not used; set_audio supports shorter - moviepy will cut
             composite = composite.set_audio(music.set_duration(DURATION))
         except Exception:
             pass
