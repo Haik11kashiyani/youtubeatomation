@@ -1,0 +1,131 @@
+name: Generate Video
+
+on:
+  workflow_dispatch:
+    inputs:
+      script_file:
+        description: Optional custom script file (default script.txt)
+        required: false
+        default: script.txt
+      runner:
+        description: Which script to run (build_shorts.py or create_video.py)
+        required: false
+        default: build_shorts.py
+  schedule:
+    - cron: '0 3 * * *' # 03:00 UTC daily (optional)
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Run generator
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: youtubeatomation
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('youtubeatomation/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: List project files
+        run: |
+          ls -la
+          ls -la "12 photos" || true
+          ls -la fonts || true
+
+      - name: Run generator
+        env:
+          # Add any required secrets here if your scripts need them
+          # EXAMPLE_SECRET: ${{ secrets.EXAMPLE_SECRET }}
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -e
+          echo "Runner: ${{ github.event.inputs.runner || 'build_shorts.py' }}"
+          if [ -n "${{ github.event.inputs.script_file }}" ]; then
+            echo "Using script file: ${{ github.event.inputs.script_file }}"
+          fi
+          python "${{ github.event.inputs.runner || 'build_shorts.py' }}"
+
+      - name: Find generated videos
+        id: find_out
+        run: |
+          shopt -s nullglob
+          vids=( *.mp4 *.mov *.mkv )
+          echo "Found: ${vids[@]}"
+          printf 'files=%s\n' "${vids[*]}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact (videos)
+        if: steps.find_out.outputs.files != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-videos
+          path: |
+            youtubeatomation/*.mp4
+            youtubeatomation/*.mov
+            youtubeatomation/*.mkv
+          if-no-files-found: warn
+
+      - name: Upload logs and intermediates
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-logs
+          path: |
+            youtubeatomation/**/*.log
+            youtubeatomation/**/*.txt
+            !youtubeatomation/requirements.txt
+          if-no-files-found: ignore
+
+  # Optional job that could upload to YouTube if you wire up secrets.
+  # Keep disabled until secrets are configured and OAuth is handled headlessly.
+  # upload:
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: read
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.11'
+  #     - name: Install dependencies
+  #       working-directory: youtubeatomation
+  #       run: |
+  #         python -m pip install --upgrade pip
+  #         pip install -r requirements.txt
+  #     - name: Download generated videos
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: generated-videos
+  #         path: youtubeatomation
+  #     - name: Upload to YouTube
+  #       working-directory: youtubeatomation
+  #       env:
+  #         # Map your GitHub repo secrets here
+  #         # YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+  #         # YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+  #         # YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+  #       run: |
+  #         python youtube_upload.py
+
+
