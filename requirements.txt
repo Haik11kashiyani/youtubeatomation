@@ -4,11 +4,13 @@ google-auth-oauthlib
 google-api-python-client
 google-auth-httplib2
 
+
 # Video creation
 moviepy==1.0.3
 imageio-ffmpeg
 ffmpeg-python
 pillow==9.5.0
+playwright
 
 # Networking
 requests

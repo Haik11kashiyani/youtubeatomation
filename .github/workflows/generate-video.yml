@@ -3,49 +3,48 @@ name: Generate and Upload Shorts (Sequential)
 on:
   workflow_dispatch:
     inputs:
-      script_file:
-        description: Optional custom script file (default script.txt)
+      manual_trigger:
+        description: 'Manual trigger for testing'
         required: false
-        default: script.txt
-      runner:
-        description: Which script to run (build_shorts.py or create_video.py)
-        required: false
-        default: build_shorts.py
+        default: 'true'
   schedule:
-    - cron: '0 3 * * *' # 03:00 UTC daily (optional)
+    # Runs daily at 1:30 AM UTC (7:00 AM IST - India Standard Time)
+    # IST is UTC+5:30, so 7:00 AM IST = 1:30 AM UTC
+    - cron: '30 1 * * *'
 
 permissions:
   contents: read
 
 jobs:
-  build:
-    name: Render and upload shorts sequentially
+  build-and-upload:
+    name: Generate Videos and Upload to YouTube
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install system dependencies (ffmpeg, ImageMagick)
+      - name: Install system dependencies (ffmpeg, ImageMagick, fonts)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg imagemagick
+          sudo apt-get install -y ffmpeg imagemagick fonts-noto
           ffmpeg -version
           convert --version
           echo "--- ImageMagick policy before ---"
-          sudo awk '1; END{print ""}' /etc/ImageMagick-6/policy.xml || true
+          sudo cat /etc/ImageMagick-6/policy.xml || true
           # Relax ImageMagick policy to allow @args used by MoviePy TextClip
           if [ -f /etc/ImageMagick-6/policy.xml ]; then
             sudo sed -i 's/<policy domain="path" rights="none" pattern="@\*"\/>/<!-- disabled by CI: allow @args for MoviePy -->/g' /etc/ImageMagick-6/policy.xml
           fi
           echo "--- ImageMagick policy after ---"
-          sudo awk '1; END{print ""}' /etc/ImageMagick-6/policy.xml || true
+          sudo cat /etc/ImageMagick-6/policy.xml || true
 
-      - name: Cache pip
+      - name: Cache pip dependencies
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
@@ -57,25 +56,31 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install --no-cache-dir -r requirements.txt
-          python -c "import sys; print(sys.version)"
-          python - << 'PY'
-          import pkgutil
-          import importlib
-          print('Checking moviepy...')
-          m = importlib.import_module('moviepy')
-          print('moviepy version:', getattr(m, '__version__', 'unknown'))
-          from importlib import import_module
-          import_module('moviepy.editor')
-          print('moviepy.editor import OK')
-          PY
+          echo "--- Python version ---"
+          python --version
+          echo "--- Checking MoviePy ---"
+          python -c "import moviepy; print('MoviePy version:', moviepy.__version__)"
+          python -c "from moviepy.editor import *; print('MoviePy.editor import OK')"
+          echo "--- Checking Playwright ---"
+          python -c "from playwright.sync_api import sync_playwright; print('Playwright import OK')"
+
+      - name: Install Playwright browsers
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
 
       - name: List project files
         run: |
+          echo "--- Root directory ---"
           ls -la
-          ls -la "12 photos" || true
-          ls -la fonts || true
+          echo "--- 12 photos directory ---"
+          ls -la "12 photos" || echo "12 photos directory not found"
+          echo "--- music directory ---"
+          ls -la music || echo "music directory not found"
+          echo "--- Checking for rashifal_data.json ---"
+          cat rashifal_data.json | head -20 || echo "rashifal_data.json not found"
 
-      - name: Render and upload sequentially
+      - name: Run orchestrate.py (Build + Upload)
         env:
           PYTHONUNBUFFERED: "1"
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
@@ -85,35 +90,55 @@ jobs:
           python orchestrate.py
 
       - name: Find generated videos
-        if: ${{ always() }}
-        id: find_out
+        if: always()
+        id: find_videos
         run: |
           shopt -s nullglob
           vids=( outputs/*.mp4 outputs/*.mov outputs/*.mkv )
-          echo "Found: ${vids[@]}"
-          printf 'files=%s\n' "${vids[*]}" >> "$GITHUB_OUTPUT"
+          echo "Found videos: ${vids[@]}"
+          if [ ${#vids[@]} -gt 0 ]; then
+            echo "videos_found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "videos_found=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Upload artifact (videos)
-        if: ${{ always() }}
+      - name: Upload generated videos as artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: generated-videos
+          name: rashifal-videos-${{ github.run_number }}
           path: |
             outputs/*.mp4
             outputs/*.mov
             outputs/*.mkv
           if-no-files-found: warn
+          retention-days: 7
 
-      - name: Upload logs and intermediates
+      - name: Upload logs and temp files
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: run-logs
+          name: run-logs-${{ github.run_number }}
           path: |
             **/*.log
-            **/*.txt
-            !requirements.txt
+            temp_images/*.png
           if-no-files-found: ignore
+          retention-days: 3
 
-  # Upload job removed; upload happens inline in the build job
-
-
+      - name: Workflow summary
+        if: always()
+        run: |
+          echo "## 🎬 Gujarati Rashifal Automation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Run Date:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Workflow:** ${{ github.workflow }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Run Number:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -d outputs ]; then
+            VIDEO_COUNT=$(ls -1 outputs/*.mp4 2>/dev/null | wc -l)
+            echo "**Videos Generated:** $VIDEO_COUNT" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Videos Generated:** 0 (outputs directory not found)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Check artifacts above for generated videos and logs" >> $GITHUB_STEP_SUMMARY
