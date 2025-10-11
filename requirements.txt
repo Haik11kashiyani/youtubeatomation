@@ -9,7 +9,7 @@ google-auth-httplib2
 moviepy==1.0.3
 imageio-ffmpeg
 ffmpeg-python
-pillow==9.5.0
+pillow==10.3.0
 playwright
 
 # Networking
