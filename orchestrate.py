@@ -63,6 +63,47 @@ def main():
     print("\n" + "="*70)
     print("✅ ALL DONE! Videos generated and uploaded successfully!")
     print("="*70 + "\n")
+    
+    # Step 3: Cleanup - Delete generated videos and temp files
+    print("\n🗑️  STEP 3: Cleaning up...")
+    cleanup_files()
+
+
+def cleanup_files():
+    """Delete generated videos and temporary files after upload."""
+    import shutil
+    
+    print("\n" + "="*70)
+    print("🗑️  CLEANUP: Deleting temporary files")
+    print("="*70)
+    
+    deleted_count = 0
+    
+    # Delete outputs folder (generated videos)
+    outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
+    if os.path.exists(outputs_dir):
+        try:
+            for file in os.listdir(outputs_dir):
+                file_path = os.path.join(outputs_dir, file)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    print(f"   ✅ Deleted: {file}")
+                    deleted_count += 1
+            print(f"\n   📂 Cleaned outputs/ folder ({deleted_count} files deleted)")
+        except Exception as e:
+            print(f"   ⚠️ Error cleaning outputs/: {e}")
+    
+    # Delete temp_images folder
+    temp_dir = os.path.join(os.path.dirname(__file__), "temp_images")
+    if os.path.exists(temp_dir):
+        try:
+            shutil.rmtree(temp_dir)
+            print(f"   ✅ Deleted: temp_images/ folder")
+        except Exception as e:
+            print(f"   ⚠️ Error deleting temp_images/: {e}")
+    
+    print("\n✅ Cleanup complete!")
+    print("="*70 + "\n")
 
 
 if __name__ == "__main__":
