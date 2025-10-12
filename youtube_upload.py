@@ -2,11 +2,12 @@
 Automated YouTube Shorts Uploader
 - Uploads all 12 rashifal videos from outputs folder
 - Reads data from rashifal_data.json
-- Auto-generates descriptions with rashifal info
-- Adds proper titles, tags, and hashtags
+- Auto-generates SMART titles with date, highlights, and hashtags
+- Adds proper titles, tags, and descriptions
 """
 import os
 import json
+import re
 from typing import List, Dict
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -37,20 +38,105 @@ def get_youtube_service():
 
 
 # ==================== DATA READING ====================
-def read_rashifal_json(json_path: str) -> List[Dict]:
-    """Read rashifal data from JSON file."""
+def read_rashifal_json(json_path: str) -> tuple:
+    """Read rashifal data from JSON file and return rashis list and date."""
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    return data["rashifal"]
+    return data["rashifal"], data.get("date", "")
+
+
+# ==================== SMART TITLE GENERATOR ====================
+def generate_smart_title(rashi_data: Dict, date: str) -> str:
+    """
+    Generate smart YouTube title with:
+    - Rashi name
+    - દૈનિક રાશિફળ
+    - Short date (DD/MM)
+    - Key highlight from content
+    - #shorts #viral
+    
+    Max length: 100 characters
+    """
+    
+    # Extract rashi name (e.g., "મેષ રાશિ" from "મેષ રાશિ (Aries) - દૈનિક રાશિફળ - 12/10/2025")
+    title = rashi_data.get("TITLE", "")
+    if "(" in title:
+        rashi_name = title.split("(")[0].strip()
+    else:
+        rashi_name = title.split("-")[0].strip()
+    
+    # Format date (12/10/2025 -> 12/10)
+    short_date = date.split("/")[0] + "/" + date.split("/")[1] if "/" in date else date
+    
+    # Extract key highlights from content
+    content = rashi_data.get("content", {})
+    highlight = extract_key_highlight(content)
+    
+    # Build title parts
+    base = f"{rashi_name} દૈનિક રાશિફળ {short_date}"
+    hashtags = " #shorts #viral"
+    
+    # Calculate remaining space for highlight
+    remaining_space = 100 - len(base) - len(hashtags) - 3  # -3 for " | "
+    
+    if remaining_space > 15:  # Only add highlight if there's enough space
+        # Trim highlight to fit
+        if len(highlight) > remaining_space:
+            highlight = highlight[:remaining_space-3] + "..."
+        
+        final_title = f"{base} | {highlight}{hashtags}"
+    else:
+        # If not enough space, skip highlight
+        final_title = f"{base}{hashtags}"
+    
+    # Ensure it's under 100 chars
+    return final_title[:100]
+
+
+def extract_key_highlight(content: Dict[str, str]) -> str:
+    """
+    Extract the most important/exciting phrase from content.
+    Looks for keywords like: લાભ, સફળતા, યોગ, નફો, પ્રેમ, નાણાં, etc.
+    """
+    
+    # Priority keywords to look for (in order of importance)
+    priority_keywords = [
+        "ધન લાભ", "નફો", "સફળતા", "પ્રમોશન", "યોગ", 
+        "પ્રેમ", "નાણાં", "ઉત્સાહ", "ખુશી", "શુભ", 
+        "નવું", "આનંદ", "વિજય", "મજબૂત"
+    ]
+    
+    # Search through content sections
+    for section_text in content.values():
+        # Clean text (remove extra spaces and newlines)
+        clean_text = " ".join(section_text.split())
+        
+        # Look for priority keywords
+        for keyword in priority_keywords:
+            if keyword in clean_text:
+                # Extract sentence containing keyword
+                sentences = re.split('[.!?।\n]', clean_text)
+                for sentence in sentences:
+                    if keyword in sentence:
+                        # Clean and trim sentence
+                        highlight = sentence.strip()
+                        # Remove common prefixes
+                        highlight = highlight.replace("આજે ", "")
+                        highlight = highlight.replace("તમારા માટે ", "")
+                        highlight = highlight.replace("તમે ", "")
+                        return highlight[:50]  # Max 50 chars for highlight
+    
+    # Fallback: use first 40 chars of first content section
+    first_section = list(content.values())[0] if content else ""
+    return " ".join(first_section.split())[:40]
 
 
 # ==================== DESCRIPTION GENERATOR ====================
-def generate_description(rashi_data: Dict) -> str:
+def generate_description(rashi_data: Dict, date: str) -> str:
     """Generate YouTube description from rashifal data."""
     
     title = rashi_data.get("TITLE", "")
     content = rashi_data.get("content", {})
-    date = rashi_data.get("date", "")
     
     # Extract rashi name
     rashi_name = title.split("(")[0].strip() if "(" in title else title.split("-")[0].strip()
@@ -59,10 +145,10 @@ def generate_description(rashi_data: Dict) -> str:
     description_parts = []
     
     # Header
-    description_parts.append(f"🌟 {rashi_name} 🌟")
-    description_parts.append(f"તારીખ: {date}\n")
+    description_parts.append(f"🌟 {rashi_name} - દૈનિક રાશિફળ 🌟")
+    description_parts.append(f"📅 તારીખ: {date}\n")
     
-    # Add first 2-3 content sections as preview
+    # Add first 3 content sections as preview
     preview_count = 0
     for heading, text in content.items():
         if preview_count >= 3:
@@ -75,19 +161,22 @@ def generate_description(rashi_data: Dict) -> str:
     
     # Call to action
     description_parts.append("\n📱 આ વિડિયો ગમે તો લાઈક અને શેર કરો!")
-    description_parts.append("🔔 વધુ દૈનિક રાશિફળ માટે સબ્સ્ક્રાઈબ કરો!\n")
+    description_parts.append("🔔 વધુ દૈનિક રાશિફળ માટે સબ્સ્ક્રાઈબ કરો!")
+    description_parts.append("💬 કોમેન્ટમાં તમારી રાશિ જણાવો!\n")
     
     # Hashtags
     hashtags = [
         "#GujaratiRashifal",
-        "#DailyHoroscope",
+        "#DailyHoroscope", 
         "#Rashifal",
         "#Astrology",
         "#GujaratiShorts",
         "#Horoscope",
         f"#{rashi_name.replace(' ', '')}",
         "#Zodiac",
-        "#Gujarat"
+        "#Gujarat",
+        "#Shorts",
+        "#Viral"
     ]
     description_parts.append(" ".join(hashtags))
     
@@ -105,7 +194,7 @@ def upload_video(
     """Upload a single video to YouTube."""
     
     print(f"\n📤 Uploading: {os.path.basename(file_path)}")
-    print(f"   Title: {title[:60]}...")
+    print(f"   Title: {title}")
     
     try:
         service = get_youtube_service()
@@ -127,7 +216,9 @@ def upload_video(
                 "zodiac",
                 "rashifal",
                 "gujarati",
-                "horoscope shorts"
+                "horoscope shorts",
+                "viral shorts",
+                "gujarati astrology"
             ]
         
         # Prepare request body
@@ -165,19 +256,22 @@ def upload_video(
         
         # Add to playlist if specified
         if playlist_id:
-            service.playlistItems().insert(
-                part="snippet",
-                body={
-                    "snippet": {
-                        "playlistId": playlist_id,
-                        "resourceId": {
-                            "kind": "youtube#video",
-                            "videoId": response["id"]
+            try:
+                service.playlistItems().insert(
+                    part="snippet",
+                    body={
+                        "snippet": {
+                            "playlistId": playlist_id,
+                            "resourceId": {
+                                "kind": "youtube#video",
+                                "videoId": response["id"]
+                            }
                         }
                     }
-                }
-            ).execute()
-            print(f"   ✅ Added to playlist: {playlist_id}")
+                ).execute()
+                print(f"   ✅ Added to playlist: {playlist_id}")
+            except Exception as e:
+                print(f"   ⚠️ Could not add to playlist: {e}")
         
         return response["id"]
         
@@ -192,12 +286,12 @@ def upload_video(
 def upload_all_rashifal_videos(playlist_id: str = None):
     """
     Upload all rashifal videos from outputs folder.
-    Reads titles and content from JSON to generate descriptions.
+    Reads titles and content from JSON to generate smart titles and descriptions.
     """
     
     print("\n" + "="*70)
     print("📤 YOUTUBE SHORTS AUTO UPLOADER")
-    print("   Uploading all rashifal videos with auto-generated descriptions")
+    print("   Smart titles with date, highlights, and #shorts #viral")
     print("="*70)
     
     # Check JSON file
@@ -213,7 +307,8 @@ def upload_all_rashifal_videos(playlist_id: str = None):
     
     # Read rashifal data
     try:
-        rashifal_list = read_rashifal_json(JSON_PATH)
+        rashifal_list, date = read_rashifal_json(JSON_PATH)
+        print(f"\n✅ Date from JSON: {date}")
     except Exception as e:
         print(f"\n❌ JSON Error: {e}")
         import traceback
@@ -228,7 +323,7 @@ def upload_all_rashifal_videos(playlist_id: str = None):
         print("   Run build_shorts.py first!")
         return
     
-    print(f"\n✅ Found {len(video_files)} videos to upload")
+    print(f"✅ Found {len(video_files)} videos to upload")
     print(f"✅ Found {len(rashifal_list)} rashis in JSON\n")
     
     # Match videos with rashifal data
@@ -249,14 +344,19 @@ def upload_all_rashifal_videos(playlist_id: str = None):
             failed_count += 1
             continue
         
-        # Generate title and description
-        youtube_title = rashi_data.get("YOUTUBE_SHORT_TITLE", rashi_data.get("TITLE", ""))
-        description = generate_description(rashi_data)
+        # Generate SMART title and description
+        smart_title = generate_smart_title(rashi_data, date)
+        description = generate_description(rashi_data, date)
+        
+        print(f"\n{'='*70}")
+        print(f"🎬 Processing: {video_filename}")
+        print(f"   Generated Title: {smart_title}")
+        print(f"   Length: {len(smart_title)} chars")
         
         # Upload
         video_id = upload_video(
             file_path=video_path,
-            title=youtube_title,
+            title=smart_title,
             description=description,
             playlist_id=playlist_id
         )
