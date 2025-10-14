@@ -1,24 +1,27 @@
-name: Generate and Upload Shorts (Sequential)
-# Automated Gujarati Rashifal Videos - Daily at 7:00 AM IST
+name: Generate and Upload Shorts (Smart Batching)
+# Automated Gujarati Rashifal Videos
+# 6:00 AM IST - Generate 12 videos, upload first 6, cleanup
+# 7:00 AM IST - Upload remaining 6, final cleanup
 
 on:
   workflow_dispatch:
     inputs:
-      manual_trigger:
-        description: 'Manual trigger for testing'
+      batch_mode:
+        description: 'Batch mode: first or second'
         required: false
-        default: 'true'
+        default: 'first'
   schedule:
-    # Runs daily at 1:30 AM UTC (7:00 AM IST - India Standard Time)
-    # IST is UTC+5:30, so 7:00 AM IST = 1:30 AM UTC
+    # Batch 1: 6:00 AM IST (00:30 UTC) - Generate + Upload first 6
+    - cron: '30 0 * * *'
+    # Batch 2: 7:00 AM IST (01:30 UTC) - Upload remaining 6
     - cron: '30 1 * * *'
 
 permissions:
   contents: read
 
 jobs:
-  build-and-upload:
-    name: Generate Videos and Upload to YouTube
+  upload-batch:
+    name: Upload Rashifal Batch
     runs-on: ubuntu-latest
     
     steps:
@@ -81,48 +84,66 @@ jobs:
           echo "--- Checking for rashifal_data.json ---"
           cat rashifal_data.json | head -20 || echo "rashifal_data.json not found"
 
-      - name: Run orchestrate.py (Build + Upload)
+      - name: Determine batch mode
+        id: batch
+        run: |
+          CURRENT_HOUR=$(date -u +%H)
+          echo "Current UTC hour: $CURRENT_HOUR"
+          
+          if [ "$CURRENT_HOUR" -eq "0" ]; then
+            echo "batch=first" >> $GITHUB_OUTPUT
+            echo "🌅 This is BATCH 1 (6 AM IST): Generate + Upload first 6"
+          elif [ "$CURRENT_HOUR" -eq "1" ]; then
+            echo "batch=second" >> $GITHUB_OUTPUT
+            echo "🌄 This is BATCH 2 (7 AM IST): Upload remaining 6"
+          else
+            # Manual trigger - check input
+            if [ "${{ github.event.inputs.batch_mode }}" == "second" ]; then
+              echo "batch=second" >> $GITHUB_OUTPUT
+              echo "Manual trigger: BATCH 2"
+            else
+              echo "batch=first" >> $GITHUB_OUTPUT
+              echo "Manual trigger: BATCH 1"
+            fi
+          fi
+
+      - name: Run orchestrate.py (Batch ${{ steps.batch.outputs.batch }})
         env:
           PYTHONUNBUFFERED: "1"
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
         run: |
-          python orchestrate.py
+          python orchestrate.py ${{ steps.batch.outputs.batch }}
 
-      - name: Find generated videos
+      - name: Find remaining videos
         if: always()
         id: find_videos
         run: |
-          shopt -s nullglob
-          vids=( outputs/*.mp4 outputs/*.mov outputs/*.mkv )
-          echo "Found videos: ${vids[@]}"
-          if [ ${#vids[@]} -gt 0 ]; then
-            echo "videos_found=true" >> "$GITHUB_OUTPUT"
+          if [ -d outputs ]; then
+            VIDEO_COUNT=$(ls -1 outputs/*.mp4 2>/dev/null | wc -l)
+            echo "videos_remaining=$VIDEO_COUNT" >> $GITHUB_OUTPUT
+            echo "Remaining videos in outputs/: $VIDEO_COUNT"
           else
-            echo "videos_found=false" >> "$GITHUB_OUTPUT"
+            echo "videos_remaining=0" >> $GITHUB_OUTPUT
           fi
 
-      - name: Upload generated videos as artifacts
-        if: always()
+      - name: Upload remaining videos as artifacts
+        if: always() && steps.batch.outputs.batch == 'first' && steps.find_videos.outputs.videos_remaining != '0'
         uses: actions/upload-artifact@v4
         with:
-          name: rashifal-videos-${{ github.run_number }}
-          path: |
-            outputs/*.mp4
-            outputs/*.mov
-            outputs/*.mkv
+          name: remaining-videos-for-batch2
+          path: outputs/*.mp4
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 1
 
-      - name: Upload logs and temp files
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: run-logs-${{ github.run_number }}
+          name: run-logs-batch-${{ steps.batch.outputs.batch }}-${{ github.run_number }}
           path: |
             **/*.log
-            temp_images/*.png
           if-no-files-found: ignore
           retention-days: 3
 
@@ -132,14 +153,22 @@ jobs:
           echo "## 🎬 Gujarati Rashifal Automation Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Run Date:** $(date)" >> $GITHUB_STEP_SUMMARY
-          echo "**Workflow:** ${{ github.workflow }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Batch:** ${{ steps.batch.outputs.batch }}" >> $GITHUB_STEP_SUMMARY
           echo "**Run Number:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -d outputs ]; then
-            VIDEO_COUNT=$(ls -1 outputs/*.mp4 2>/dev/null | wc -l)
-            echo "**Videos Generated:** $VIDEO_COUNT" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.batch.outputs.batch }}" == "first" ]; then
+            echo "🌅 **Batch 1 Complete (6 AM IST)**" >> $GITHUB_STEP_SUMMARY
+            echo "- Generated 12 videos" >> $GITHUB_STEP_SUMMARY
+            echo "- Uploaded first 6 rashis" >> $GITHUB_STEP_SUMMARY
+            echo "- Cleaned uploaded videos + temp files" >> $GITHUB_STEP_SUMMARY
+            echo "- Remaining 6 videos ready for 7 AM upload" >> $GITHUB_STEP_SUMMARY
           else
-            echo "**Videos Generated:** 0 (outputs directory not found)" >> $GITHUB_STEP_SUMMARY
+            echo "🌄 **Batch 2 Complete (7 AM IST)**" >> $GITHUB_STEP_SUMMARY
+            echo "- Uploaded remaining 6 rashis" >> $GITHUB_STEP_SUMMARY
+            echo "- All 12 videos published today" >> $GITHUB_STEP_SUMMARY
+            echo "- Final cleanup done" >> $GITHUB_STEP_SUMMARY
           fi
+          
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Check artifacts above for generated videos and logs" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Check artifacts above for logs" >> $GITHUB_STEP_SUMMARY
