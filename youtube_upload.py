@@ -1,12 +1,13 @@
 """
-Automated YouTube Shorts Uploader
-- Uploads all 12 rashifal videos from outputs folder
+Automated YouTube Shorts Uploader - BATCHED VERSION
+- Uploads rashifal videos in batches to avoid rate limits
+- Can upload first 6 or last 6 rashis based on argument
 - Reads data from rashifal_data.json
-- Auto-generates SMART titles with date, highlights, and hashtags
-- Adds proper titles, tags, and descriptions
+- Auto-generates smart titles with date and highlights
 """
 import os
 import json
+import sys
 import re
 from typing import List, Dict
 from google.oauth2.credentials import Credentials
@@ -47,86 +48,57 @@ def read_rashifal_json(json_path: str) -> tuple:
 
 # ==================== SMART TITLE GENERATOR ====================
 def generate_smart_title(rashi_data: Dict, date: str) -> str:
-    """
-    Generate smart YouTube title with:
-    - Rashi name
-    - દૈનિક રાશિફળ
-    - Short date (DD/MM)
-    - Key highlight from content
-    - #shorts #viral
+    """Generate smart YouTube title with date, highlights, and hashtags."""
     
-    Max length: 100 characters
-    """
-    
-    # Extract rashi name (e.g., "મેષ રાશિ" from "મેષ રાશિ (Aries) - દૈનિક રાશિફળ - 12/10/2025")
     title = rashi_data.get("TITLE", "")
     if "(" in title:
         rashi_name = title.split("(")[0].strip()
     else:
         rashi_name = title.split("-")[0].strip()
     
-    # Format date (12/10/2025 -> 12/10)
     short_date = date.split("/")[0] + "/" + date.split("/")[1] if "/" in date else date
     
-    # Extract key highlights from content
     content = rashi_data.get("content", {})
     highlight = extract_key_highlight(content)
     
-    # Build title parts
     base = f"{rashi_name} દૈનિક રાશિફળ {short_date}"
     hashtags = " #shorts #viral"
     
-    # Calculate remaining space for highlight
-    remaining_space = 100 - len(base) - len(hashtags) - 3  # -3 for " | "
+    remaining_space = 100 - len(base) - len(hashtags) - 3
     
-    if remaining_space > 15:  # Only add highlight if there's enough space
-        # Trim highlight to fit
+    if remaining_space > 15:
         if len(highlight) > remaining_space:
             highlight = highlight[:remaining_space-3] + "..."
-        
         final_title = f"{base} | {highlight}{hashtags}"
     else:
-        # If not enough space, skip highlight
         final_title = f"{base}{hashtags}"
     
-    # Ensure it's under 100 chars
     return final_title[:100]
 
 
 def extract_key_highlight(content: Dict[str, str]) -> str:
-    """
-    Extract the most important/exciting phrase from content.
-    Looks for keywords like: લાભ, સફળતા, યોગ, નફો, પ્રેમ, નાણાં, etc.
-    """
+    """Extract the most important/exciting phrase from content."""
     
-    # Priority keywords to look for (in order of importance)
     priority_keywords = [
         "ધન લાભ", "નફો", "સફળતા", "પ્રમોશન", "યોગ", 
         "પ્રેમ", "નાણાં", "ઉત્સાહ", "ખુશી", "શુભ", 
         "નવું", "આનંદ", "વિજય", "મજબૂત"
     ]
     
-    # Search through content sections
     for section_text in content.values():
-        # Clean text (remove extra spaces and newlines)
         clean_text = " ".join(section_text.split())
         
-        # Look for priority keywords
         for keyword in priority_keywords:
             if keyword in clean_text:
-                # Extract sentence containing keyword
                 sentences = re.split('[.!?।\n]', clean_text)
                 for sentence in sentences:
                     if keyword in sentence:
-                        # Clean and trim sentence
                         highlight = sentence.strip()
-                        # Remove common prefixes
                         highlight = highlight.replace("આજે ", "")
                         highlight = highlight.replace("તમારા માટે ", "")
                         highlight = highlight.replace("તમે ", "")
-                        return highlight[:50]  # Max 50 chars for highlight
+                        return highlight[:50]
     
-    # Fallback: use first 40 chars of first content section
     first_section = list(content.values())[0] if content else ""
     return " ".join(first_section.split())[:40]
 
@@ -138,33 +110,26 @@ def generate_description(rashi_data: Dict, date: str) -> str:
     title = rashi_data.get("TITLE", "")
     content = rashi_data.get("content", {})
     
-    # Extract rashi name
     rashi_name = title.split("(")[0].strip() if "(" in title else title.split("-")[0].strip()
     
-    # Build description
     description_parts = []
     
-    # Header
     description_parts.append(f"🌟 {rashi_name} - દૈનિક રાશિફળ 🌟")
     description_parts.append(f"📅 તારીખ: {date}\n")
     
-    # Add first 3 content sections as preview
     preview_count = 0
     for heading, text in content.items():
         if preview_count >= 3:
             break
         description_parts.append(f"✨ {heading}:")
-        # Limit text length for description
         preview_text = text[:150] + "..." if len(text) > 150 else text
         description_parts.append(f"{preview_text}\n")
         preview_count += 1
     
-    # Call to action
     description_parts.append("\n📱 આ વિડિયો ગમે તો લાઈક અને શેર કરો!")
     description_parts.append("🔔 વધુ દૈનિક રાશિફળ માટે સબ્સ્ક્રાઈબ કરો!")
     description_parts.append("💬 કોમેન્ટમાં તમારી રાશિ જણાવો!\n")
     
-    # Hashtags
     hashtags = [
         "#GujaratiRashifal",
         "#DailyHoroscope", 
@@ -184,13 +149,7 @@ def generate_description(rashi_data: Dict, date: str) -> str:
 
 
 # ==================== VIDEO UPLOAD ====================
-def upload_video(
-    file_path: str,
-    title: str,
-    description: str,
-    tags: List[str] = None,
-    playlist_id: str = None
-):
+def upload_video(file_path: str, title: str, description: str, tags: List[str] = None, playlist_id: str = None):
     """Upload a single video to YouTube."""
     
     print(f"\n📤 Uploading: {os.path.basename(file_path)}")
@@ -199,7 +158,6 @@ def upload_video(
     try:
         service = get_youtube_service()
         
-        # Prepare media file
         media = MediaFileUpload(
             file_path,
             chunksize=-1,
@@ -207,7 +165,6 @@ def upload_video(
             mimetype="video/*"
         )
         
-        # Default tags if none provided
         if tags is None:
             tags = [
                 "gujarati rashifal",
@@ -221,13 +178,12 @@ def upload_video(
                 "gujarati astrology"
             ]
         
-        # Prepare request body
         body = {
             "snippet": {
-                "title": title[:100],  # YouTube limit: 100 chars
-                "description": description[:5000],  # YouTube limit: 5000 chars
-                "tags": tags[:500],  # YouTube limit: 500 tags
-                "categoryId": "24"  # Entertainment category
+                "title": title[:100],
+                "description": description[:5000],
+                "tags": tags[:500],
+                "categoryId": "24"
             },
             "status": {
                 "privacyStatus": "public",
@@ -235,14 +191,12 @@ def upload_video(
             }
         }
         
-        # Upload request
         request = service.videos().insert(
             part="snippet,status",
             body=body,
             media_body=media
         )
         
-        # Execute upload with progress
         response = None
         while response is None:
             status, response = request.next_chunk()
@@ -254,7 +208,6 @@ def upload_video(
         print(f"   🎬 Video ID: {response['id']}")
         print(f"   🔗 URL: https://youtube.com/shorts/{response['id']}")
         
-        # Add to playlist if specified
         if playlist_id:
             try:
                 service.playlistItems().insert(
@@ -283,54 +236,55 @@ def upload_video(
 
 
 # ==================== MAIN UPLOAD FUNCTION ====================
-def upload_all_rashifal_videos(playlist_id: str = None):
+def upload_rashifal_batch(batch: str = "all", playlist_id: str = None):
     """
-    Upload all rashifal videos from outputs folder.
-    Reads titles and content from JSON to generate smart titles and descriptions.
+    Upload rashifal videos in batches.
+    
+    Args:
+        batch: "first" (rashis 1-6), "second" (rashis 7-12), or "all" (all 12)
+        playlist_id: Optional YouTube playlist ID
     """
     
     print("\n" + "="*70)
-    print("📤 YOUTUBE SHORTS AUTO UPLOADER")
-    print("   Smart titles with date, highlights, and #shorts #viral")
+    print("📤 YOUTUBE SHORTS BATCHED UPLOADER")
+    if batch == "first":
+        print("   Uploading FIRST 6 rashis (Batch 1/2)")
+    elif batch == "second":
+        print("   Uploading LAST 6 rashis (Batch 2/2)")
+    else:
+        print("   Uploading ALL 12 rashis")
     print("="*70)
     
-    # Check JSON file
     if not os.path.exists(JSON_PATH):
         print(f"\n❌ ERROR: JSON file not found: {JSON_PATH}")
         return
     
-    # Check outputs directory
     if not os.path.exists(OUTPUTS_DIR):
         print(f"\n❌ ERROR: Outputs directory not found: {OUTPUTS_DIR}")
-        print("   Run build_shorts.py first to create videos!")
         return
     
-    # Read rashifal data
     try:
         rashifal_list, date = read_rashifal_json(JSON_PATH)
         print(f"\n✅ Date from JSON: {date}")
     except Exception as e:
         print(f"\n❌ JSON Error: {e}")
-        import traceback
-        traceback.print_exc()
         return
     
-    # Get all video files from outputs
-    video_files = [f for f in os.listdir(OUTPUTS_DIR) if f.endswith('.mp4')]
+    # Determine which rashis to upload
+    if batch == "first":
+        rashis_to_upload = rashifal_list[:6]  # First 6
+        print(f"✅ Processing rashis 1-6 of 12\n")
+    elif batch == "second":
+        rashis_to_upload = rashifal_list[6:]  # Last 6
+        print(f"✅ Processing rashis 7-12 of 12\n")
+    else:
+        rashis_to_upload = rashifal_list  # All 12
+        print(f"✅ Processing all 12 rashis\n")
     
-    if not video_files:
-        print(f"\n❌ No video files found in: {OUTPUTS_DIR}")
-        print("   Run build_shorts.py first!")
-        return
-    
-    print(f"✅ Found {len(video_files)} videos to upload")
-    print(f"✅ Found {len(rashifal_list)} rashis in JSON\n")
-    
-    # Match videos with rashifal data
     uploaded_count = 0
     failed_count = 0
     
-    for rashi_data in rashifal_list:
+    for rashi_data in rashis_to_upload:
         video_filename = rashi_data.get("OUTPUT_FILENAME")
         
         if not video_filename:
@@ -344,7 +298,6 @@ def upload_all_rashifal_videos(playlist_id: str = None):
             failed_count += 1
             continue
         
-        # Generate SMART title and description
         smart_title = generate_smart_title(rashi_data, date)
         description = generate_description(rashi_data, date)
         
@@ -353,7 +306,6 @@ def upload_all_rashifal_videos(playlist_id: str = None):
         print(f"   Generated Title: {smart_title}")
         print(f"   Length: {len(smart_title)} chars")
         
-        # Upload
         video_id = upload_video(
             file_path=video_path,
             title=smart_title,
@@ -366,18 +318,25 @@ def upload_all_rashifal_videos(playlist_id: str = None):
         else:
             failed_count += 1
     
-    # Summary
     print("\n" + "="*70)
-    print(f"✅ UPLOAD COMPLETE!")
-    print(f"   ✅ Uploaded: {uploaded_count}/{len(rashifal_list)}")
+    print(f"✅ BATCH UPLOAD COMPLETE!")
+    print(f"   ✅ Uploaded: {uploaded_count}/{len(rashis_to_upload)}")
     print(f"   ❌ Failed: {failed_count}")
     print("="*70 + "\n")
 
 
 # ==================== MAIN ====================
 if __name__ == "__main__":
-    # Optional: Get playlist ID from environment or hardcode
     playlist_id = os.getenv("YOUTUBE_PLAYLIST_ID", None)
     
-    # Upload all videos
-    upload_all_rashifal_videos(playlist_id=playlist_id)
+    # Check if batch argument provided
+    batch_type = sys.argv[1] if len(sys.argv) > 1 else "all"
+    
+    if batch_type not in ["first", "second", "all"]:
+        print("Usage: python youtube_upload.py [first|second|all]")
+        print("  first  - Upload rashis 1-6")
+        print("  second - Upload rashis 7-12")
+        print("  all    - Upload all 12 rashis")
+        sys.exit(1)
+    
+    upload_rashifal_batch(batch=batch_type, playlist_id=playlist_id)
