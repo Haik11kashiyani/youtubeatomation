@@ -1,0 +1,64 @@
+name: Batch 2 - Upload Remaining 6 (7 AM)
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Runs daily at 7:00 AM IST (01:30 UTC)
+    - cron: '30 1 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  batch2:
+    name: Upload Remaining 6 Rashis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install --no-cache-dir -r requirements.txt
+
+      - name: Download remaining videos from Batch 1
+        uses: actions/download-artifact@v4
+        with:
+          pattern: remaining-videos-*
+          path: outputs/
+          merge-multiple: true
+
+      - name: List available videos
+        run: |
+          echo "📹 Videos available for upload:"
+          ls -lh outputs/
+
+      - name: Run Batch 2 (Upload remaining 6)
+        env:
+          PYTHONUNBUFFERED: "1"
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: |
+          echo "🌄 BATCH 2: Uploading remaining 6 videos"
+          python orchestrate.py second
+
+      - name: Summary
+        run: |
+          echo "## 🌄 Batch 2 Complete (7 AM)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Uploaded: Remaining 6 rashis" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Total today: 12 videos" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ All cleanup done" >> $GITHUB_STEP_SUMMARY
