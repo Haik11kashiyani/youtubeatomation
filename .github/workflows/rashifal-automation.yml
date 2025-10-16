@@ -1,0 +1,147 @@
+name: Rashifal Automation (2 Batches, 1 Hour Apart)
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Runs daily at 6:00 AM IST (00:30 UTC)
+    - cron: '30 0 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  batch1-generate-and-upload-6:
+    name: Batch 1 - Generate 12 + Upload First 6
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg imagemagick fonts-noto
+          if [ -f /etc/ImageMagick-6/policy.xml ]; then
+            sudo sed -i 's/<policy domain="path" rights="none" pattern="@\*"\/>/<!-- disabled -->/g' /etc/ImageMagick-6/policy.xml
+          fi
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install --no-cache-dir -r requirements.txt
+
+      - name: Install Playwright
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Run Batch 1 (Generate all 12 + Upload first 6)
+        env:
+          PYTHONUNBUFFERED: "1"
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: |
+          echo "🌅 BATCH 1: Generating 12 videos and uploading first 6"
+          python orchestrate.py first
+
+      - name: Upload remaining 6 videos as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remaining-6-videos
+          path: outputs/*.mp4
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Batch 1 Summary
+        run: |
+          echo "## 🌅 Batch 1 Complete (6:00 AM IST)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Generated: 12 videos with music" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Uploaded: First 6 rashis" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Cleaned: Uploaded videos + temp files" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Saved: Remaining 6 videos as artifact" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          REMAINING=$(ls -1 outputs/*.mp4 2>/dev/null | wc -l)
+          echo "- 📊 Videos waiting for Batch 2: $REMAINING" >> $GITHUB_STEP_SUMMARY
+
+  batch2-upload-remaining-6:
+    name: Batch 2 - Upload Remaining 6 (1 Hour Later)
+    runs-on: ubuntu-latest
+    needs: batch1-generate-and-upload-6
+    
+    steps:
+      - name: Wait 1 hour before uploading remaining videos
+        run: |
+          echo "⏰ Waiting 1 hour to avoid YouTube rate limits..."
+          echo "Current time: $(date)"
+          sleep 3600
+          echo "✅ 1 hour passed. Current time: $(date)"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install --no-cache-dir -r requirements.txt
+
+      - name: Download remaining 6 videos from Batch 1
+        uses: actions/download-artifact@v4
+        with:
+          name: remaining-6-videos
+          path: outputs/
+
+      - name: Verify downloaded videos
+        run: |
+          echo "📹 Videos downloaded for upload:"
+          ls -lh outputs/
+          VIDEO_COUNT=$(ls -1 outputs/*.mp4 2>/dev/null | wc -l)
+          echo "Total videos: $VIDEO_COUNT"
+          if [ "$VIDEO_COUNT" -ne 6 ]; then
+            echo "⚠️ Warning: Expected 6 videos, found $VIDEO_COUNT"
+          fi
+
+      - name: Run Batch 2 (Upload remaining 6)
+        env:
+          PYTHONUNBUFFERED: "1"
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: |
+          echo "🌄 BATCH 2: Uploading remaining 6 videos"
+          python orchestrate.py second
+
+      - name: Batch 2 Summary
+        run: |
+          echo "## 🌄 Batch 2 Complete (7:00 AM IST)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Downloaded: 6 videos from Batch 1" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Uploaded: Remaining 6 rashis" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Total videos today: 12" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ All cleanup complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🎉 **Daily automation successful!**" >> $GITHUB_STEP_SUMMARY
