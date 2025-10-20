@@ -1,7 +1,10 @@
 """
-Automated YouTube Shorts Uploader - BATCHED VERSION
-- Uploads rashifal videos in batches to avoid rate limits
-- Can upload first 6 or last 6 rashis based on argument
+Automated YouTube Shorts Uploader - 4 BATCHES VERSION
+- Uploads rashifal videos in 4 batches (3 videos each)
+- Batch 1: Rashis 1-3 (12 AM)
+- Batch 2: Rashis 4-6 (2 AM)
+- Batch 3: Rashis 7-9 (4 AM)
+- Batch 4: Rashis 10-12 (6 AM)
 - Reads data from rashifal_data.json
 - Auto-generates smart titles with date and highlights
 """
@@ -43,7 +46,15 @@ def read_rashifal_json(json_path: str) -> tuple:
     """Read rashifal data from JSON file and return rashis list and date."""
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    return data["rashifal"], data.get("date", "")
+    
+    # Handle new structure with rashifal_dates array
+    if "rashifal_dates" in data:
+        # Get the first date's data
+        first_date_data = data["rashifal_dates"][0]
+        return first_date_data["rashifal"], first_date_data.get("date", "")
+    else:
+        # Old structure
+        return data["rashifal"], data.get("date", "")
 
 
 # ==================== SMART TITLE GENERATOR ====================
@@ -90,7 +101,7 @@ def extract_key_highlight(content: Dict[str, str]) -> str:
         
         for keyword in priority_keywords:
             if keyword in clean_text:
-                sentences = re.split('[.!?।\n]', clean_text)
+                sentences = re.split('[.!?૥\n]', clean_text)
                 for sentence in sentences:
                     if keyword in sentence:
                         highlight = sentence.strip()
@@ -241,18 +252,30 @@ def upload_rashifal_batch(batch: str = "all", playlist_id: str = None):
     Upload rashifal videos in batches.
     
     Args:
-        batch: "first" (rashis 1-6), "second" (rashis 7-12), or "all" (all 12)
+        batch: "batch1" (1-3), "batch2" (4-6), "batch3" (7-9), "batch4" (10-12), or "all"
         playlist_id: Optional YouTube playlist ID
     """
     
+    # Define batch ranges
+    batch_ranges = {
+        "batch1": (0, 3, "1-3"),    # Rashis 1-3
+        "batch2": (3, 6, "4-6"),    # Rashis 4-6
+        "batch3": (6, 9, "7-9"),    # Rashis 7-9
+        "batch4": (9, 12, "10-12")  # Rashis 10-12
+    }
+    
     print("\n" + "="*70)
-    print("📤 YOUTUBE SHORTS BATCHED UPLOADER")
-    if batch == "first":
-        print("   Uploading FIRST 6 rashis (Batch 1/2)")
-    elif batch == "second":
-        print("   Uploading LAST 6 rashis (Batch 2/2)")
-    else:
+    print("📤 YOUTUBE SHORTS BATCHED UPLOADER (4 BATCHES)")
+    
+    if batch in batch_ranges:
+        start, end, label = batch_ranges[batch]
+        print(f"   Uploading rashis {label} (Batch {batch[-1]}/4)")
+    elif batch == "all":
         print("   Uploading ALL 12 rashis")
+    else:
+        print(f"   ❌ Invalid batch: {batch}")
+        return
+    
     print("="*70)
     
     if not os.path.exists(JSON_PATH):
@@ -271,12 +294,10 @@ def upload_rashifal_batch(batch: str = "all", playlist_id: str = None):
         return
     
     # Determine which rashis to upload
-    if batch == "first":
-        rashis_to_upload = rashifal_list[:6]  # First 6
-        print(f"✅ Processing rashis 1-6 of 12\n")
-    elif batch == "second":
-        rashis_to_upload = rashifal_list[6:]  # Last 6
-        print(f"✅ Processing rashis 7-12 of 12\n")
+    if batch in batch_ranges:
+        start, end, label = batch_ranges[batch]
+        rashis_to_upload = rashifal_list[start:end]
+        print(f"✅ Processing rashis {label} ({len(rashis_to_upload)} videos)\n")
     else:
         rashis_to_upload = rashifal_list  # All 12
         print(f"✅ Processing all 12 rashis\n")
@@ -332,10 +353,14 @@ if __name__ == "__main__":
     # Check if batch argument provided
     batch_type = sys.argv[1] if len(sys.argv) > 1 else "all"
     
-    if batch_type not in ["first", "second", "all"]:
-        print("Usage: python youtube_upload.py [first|second|all]")
-        print("  first  - Upload rashis 1-6")
-        print("  second - Upload rashis 7-12")
+    valid_batches = ["batch1", "batch2", "batch3", "batch4", "all"]
+    
+    if batch_type not in valid_batches:
+        print("Usage: python youtube_upload.py [batch1|batch2|batch3|batch4|all]")
+        print("  batch1 - Upload rashis 1-3 (12 AM)")
+        print("  batch2 - Upload rashis 4-6 (2 AM)")
+        print("  batch3 - Upload rashis 7-9 (4 AM)")
+        print("  batch4 - Upload rashis 10-12 (6 AM)")
         print("  all    - Upload all 12 rashis")
         sys.exit(1)
     
