@@ -258,10 +258,10 @@ def upload_rashifal_batch(batch: str = "all", playlist_id: str = None):
     
     # Define batch ranges
     batch_ranges = {
-        "batch1": (0, 3, "1-3"),    # Rashis 1-3
-        "batch2": (3, 6, "4-6"),    # Rashis 4-6
-        "batch3": (6, 9, "7-9"),    # Rashis 7-9
-        "batch4": (9, 12, "10-12")  # Rashis 10-12
+        "batch1": (0, 4, "1-4"),    # Rashis 1-4
+        "batch2": (4, 8, "5-8"),    # Rashis 5-8
+        "batch3": (8, 12, "9-12"),  # Rashis 9-12
+        "batch4": (9, 12, "10-12")  # Rashis 10-12 (legacy support)
     }
     
     print("\n" + "="*70)
