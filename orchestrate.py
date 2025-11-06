@@ -54,7 +54,7 @@ def get_batch_files_from_json(batch_number: int):
     Get list of files for specific batch from rashifal_data.json.
     
     Args:
-        batch_number: 1 (rashis 1-3), 2 (rashis 4-6), 3 (rashis 7-9), 4 (rashis 10-12)
+        batch_number: 1 (rashis 1-4), 2 (rashis 5-8), 3 (rashis 9-12)
     
     Returns:
         List of OUTPUT_FILENAME for the batch
@@ -75,12 +75,11 @@ def get_batch_files_from_json(batch_number: int):
         else:
             rashifal_list = data.get("rashifal", [])
         
-        # Define batch ranges
+        # Define batch ranges (4 videos each)
         batch_ranges = {
-            1: (0, 3),    # Rashis 1-3
-            2: (3, 6),    # Rashis 4-6
-            3: (6, 9),    # Rashis 7-9
-            4: (9, 12)    # Rashis 10-12
+            1: (0, 4),    # Rashis 1-4
+            2: (4, 8),    # Rashis 5-8
+            3: (8, 12)    # Rashis 9-12
         }
         
         if batch_number not in batch_ranges:
