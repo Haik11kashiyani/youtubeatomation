@@ -216,6 +216,10 @@ def main():
         print("   ✅ Temp files cleaned")
         print("   ⏳ Waiting for 12:00 AM to start uploads...")
         print("="*70 + "\n")
+
+        if video_count == 0:
+            print("❌ CRITICAL ERROR: 0 videos were generated! Checking logs for details...")
+            sys.exit(1)
         
     elif stage in ["batch1", "batch2", "batch3", "batch4"]:
         # === UPLOAD BATCHES ===

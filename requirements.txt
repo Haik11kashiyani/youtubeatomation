@@ -18,9 +18,9 @@ idna==3.10
 imageio==2.37.0
 imageio-ffmpeg==0.6.0
 moviepy==1.0.3
-numpy==2.3.3
+numpy<2.0.0
 oauthlib==3.3.1
-pillow==11.3.0
+pillow<10.0.0
 playwright==1.55.0
 proglog==0.1.12
 proto-plus==1.26.1
