@@ -1,18 +1,18 @@
-name: Rashifal Automation - 4 AM Start (3 Batches × 4 Videos)
+name: Rashifal Automation - Generate 4AM, Upload All at 6AM
 
 on:
   workflow_dispatch:
   schedule:
-    # Runs daily at 4:00 AM IST (22:30 UTC previous day)
+    # Runs daily at 4:00 AM IST (22:30 UTC previous day) — videos generated now, uploaded at 6 AM
     - cron: '30 22 * * *'
 
 permissions:
   contents: read
 
 jobs:
-  # JOB 1: Generate all 12 videos (4 AM)
+  # JOB 1: Generate all 12 videos (4 AM IST) — uploads begin at 6 AM IST
   generate-videos:
-    name: 🌙 Generate All 12 Videos (4 AM)
+    name: 🌙 Generate All 12 Videos (4 AM IST)
     runs-on: ubuntu-latest
     
     steps:
@@ -65,23 +65,21 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## 🌙 Generation Complete (4 AM)" >> $GITHUB_STEP_SUMMARY
+          echo "## 🌙 Generation Complete (4 AM IST)" >> $GITHUB_STEP_SUMMARY
           echo "✅ Generated: 12 videos" >> $GITHUB_STEP_SUMMARY
-          echo "⏳ Next: Batch 1 at 6 AM (2 hour wait)" >> $GITHUB_STEP_SUMMARY
+          echo "⏳ Next: All 3 upload batches will run back-to-back starting at 6 AM IST" >> $GITHUB_STEP_SUMMARY
 
 
-  # JOB 2: Upload Batch 1 (6 AM) - 2 hours after generation
+  # JOB 2: Upload Batch 1 (6 AM IST) - starts immediately after generation job
   upload-batch1:
-    name: 🌅 Upload Batch 1 - Rashis 1-4 (6 AM)
+    name: 🌅 Upload Batch 1 - Rashis 1-4 (6 AM IST)
     runs-on: ubuntu-latest
     needs: generate-videos
     
     steps:
-      - name: Wait 2 hours (4 AM → 6 AM)
+      - name: Start Batch 1 upload
         run: |
-          echo "⏰ Waiting 2 hours before uploading batch 1..."
-          sleep 7200
-          echo "✅ 2 hours passed. Starting batch 1 upload at 6 AM."
+          echo "🌅 Starting Batch 1 upload (Rashis 1-4) at 6 AM IST"
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -122,25 +120,23 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## 🌅 Batch 1 Complete (6 AM)" >> $GITHUB_STEP_SUMMARY
+          echo "## 🌅 Batch 1 Complete (6 AM IST)" >> $GITHUB_STEP_SUMMARY
           echo "✅ Uploaded: Rashis 1-4 (4 videos)" >> $GITHUB_STEP_SUMMARY
           REMAINING=$(ls -1 outputs/*.mp4 | wc -l)
           echo "📊 Remaining: $REMAINING videos" >> $GITHUB_STEP_SUMMARY
-          echo "⏳ Next: Batch 2 at 7:30 AM (1.5 hour wait)" >> $GITHUB_STEP_SUMMARY
+          echo "⏳ Next: Batch 2 uploading immediately..." >> $GITHUB_STEP_SUMMARY
 
 
-  # JOB 3: Upload Batch 2 (7:30 AM) - 1.5 hours after batch 1
+  # JOB 3: Upload Batch 2 - immediately after Batch 1
   upload-batch2:
-    name: 🌄 Upload Batch 2 - Rashis 5-8 (7:30 AM)
+    name: 🌄 Upload Batch 2 - Rashis 5-8
     runs-on: ubuntu-latest
     needs: upload-batch1
     
     steps:
-      - name: Wait 1.5 hours (6 AM → 7:30 AM)
+      - name: Start Batch 2 upload
         run: |
-          echo "⏰ Waiting 1.5 hours before uploading batch 2..."
-          sleep 5400
-          echo "✅ 1.5 hours passed. Starting batch 2 upload at 7:30 AM."
+          echo "🌄 Starting Batch 2 upload (Rashis 5-8)"
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -181,25 +177,23 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## 🌄 Batch 2 Complete (7:30 AM)" >> $GITHUB_STEP_SUMMARY
+          echo "## 🌄 Batch 2 Complete" >> $GITHUB_STEP_SUMMARY
           echo "✅ Uploaded: Rashis 5-8 (4 videos)" >> $GITHUB_STEP_SUMMARY
           REMAINING=$(ls -1 outputs/*.mp4 | wc -l)
           echo "📊 Remaining: $REMAINING videos" >> $GITHUB_STEP_SUMMARY
-          echo "⏳ Next: Batch 3 at 9:00 AM (1.5 hour wait)" >> $GITHUB_STEP_SUMMARY
+          echo "⏳ Next: Batch 3 uploading immediately..." >> $GITHUB_STEP_SUMMARY
 
 
-  # JOB 4: Upload Batch 3 (9 AM) - 1.5 hours after batch 2 - FINAL
+  # JOB 4: Upload Batch 3 - immediately after Batch 2 - FINAL
   upload-batch3:
-    name: ☀️ Upload Batch 3 - Rashis 9-12 (9 AM) - FINAL
+    name: ☀️ Upload Batch 3 - Rashis 9-12 - FINAL
     runs-on: ubuntu-latest
     needs: upload-batch2
     
     steps:
-      - name: Wait 1.5 hours (7:30 AM → 9 AM)
+      - name: Start Final Batch upload
         run: |
-          echo "⏰ Waiting 1.5 hours before uploading final batch..."
-          sleep 5400
-          echo "✅ 1.5 hours passed. Starting final batch upload at 9 AM."
+          echo "☀️ Starting FINAL Batch 3 upload (Rashis 9-12)"
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -232,15 +226,15 @@ jobs:
 
       - name: Final Summary
         run: |
-          echo "## ☀️ ALL DONE! (9 AM)" >> $GITHUB_STEP_SUMMARY
+          echo "## ☀️ ALL DONE! All 12 Videos Uploaded" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ **Uploaded:** Rashis 9-12 (4 videos)" >> $GITHUB_STEP_SUMMARY
           echo "✅ **Total:** 12 videos uploaded successfully" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📊 Today's Summary:" >> $GITHUB_STEP_SUMMARY
-          echo "- 🌙 4:00 AM: Generated 12 videos" >> $GITHUB_STEP_SUMMARY
-          echo "- 🌅 6:00 AM: Uploaded rashis 1-4" >> $GITHUB_STEP_SUMMARY
-          echo "- 🌄 7:30 AM: Uploaded rashis 5-8" >> $GITHUB_STEP_SUMMARY
-          echo "- ☀️ 9:00 AM: Uploaded rashis 9-12" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌙 4:00 AM IST: Generated 12 videos" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌅 6:00 AM IST: Upload started — Batch 1 (Rashis 1-4)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌄 Right after Batch 1: Uploaded Rashis 5-8" >> $GITHUB_STEP_SUMMARY
+          echo "- ☀️ Right after Batch 2: Uploaded Rashis 9-12" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🎉 **Automation Complete!**" >> $GITHUB_STEP_SUMMARY
+          echo "🎉 **Automation Complete! All videos uploaded at 6 AM IST!**" >> $GITHUB_STEP_SUMMARY
